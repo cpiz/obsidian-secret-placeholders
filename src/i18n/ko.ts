@@ -109,6 +109,8 @@ export const ko: Messages = {
   "modal.refEditor.optional": "{label}(선택 사항)",
 
   // 시크릿 브라우저 모달
+  "modal.secretBrowser.fieldPlaceholder": "필드 검색…",
+  "modal.secretBrowser.noFields": "이 항목에는 참조할 수 있는 필드가 없습니다.",
   "modal.secretBrowser.searchPlaceholder": "시크릿 검색…",
 
   // 시크릿 스팬

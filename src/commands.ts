@@ -7,8 +7,8 @@ import { MarkdownView, Notice } from "obsidian";
 import { t } from "./i18n";
 import type SecretPlaceholdersPlugin from "./main";
 import { RefEditorModal } from "./modals";
-import { SecretBrowserModal } from "./modals/secretBrowser";
-import type { NoteContext, Provider } from "./providers/types";
+import { SecretBrowserModal, chooseProjectField } from "./modals/secretBrowser";
+import type { NoteContext, Provider, ProviderRef } from "./providers/types";
 
 function noteCtxFromView(view: MarkdownView | null): NoteContext {
   return {
@@ -131,9 +131,10 @@ export function registerCommands(plugin: SecretPlaceholdersPlugin): void {
     editorCheckCallback: (checking, editor) => {
       if (plugin.registry.all().length === 0) return false;
       if (checking) return true;
-      new SecretBrowserModal(plugin.app, plugin, (entry) => {
-        editor.replaceSelection(entry.ref.raw);
-      }).open();
+      new SecretBrowserModal(plugin.app, plugin, ({ provider, ref }) =>
+        chooseProjectField(plugin.app, provider, ref, (field) => {
+          editor.replaceSelection(field.raw);
+        }), true).open();
     },
   });
 
@@ -142,15 +143,20 @@ export function registerCommands(plugin: SecretPlaceholdersPlugin): void {
     name: t("command.browseCopy"),
     callback: () => {
       if (plugin.registry.all().length === 0) return;
-      new SecretBrowserModal(plugin.app, plugin, async (entry) => {
-        try {
-          const v = await entry.provider.readKey(entry.ref);
-          await navigator.clipboard.writeText(v);
-          new Notice(t("notice.secretCopied"));
-        } catch (e) {
-          new Notice(t("notice.readFailed", { msg: (e as Error).message }));
-        }
-      }).open();
+      new SecretBrowserModal(plugin.app, plugin, ({ provider, ref }) => {
+        const copy = async (field: ProviderRef) => {
+          try {
+            const value = await provider.readKey(field);
+            await navigator.clipboard.writeText(value);
+            new Notice(t("notice.secretCopied"));
+          } catch (e) {
+            new Notice(t("notice.readFailed", { msg: (e as Error).message }));
+          }
+        };
+        return chooseProjectField(plugin.app, provider, ref, (field) => {
+          void copy(field);
+        });
+      }, true).open();
     },
   });
 

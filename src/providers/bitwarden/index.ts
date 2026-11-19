@@ -116,7 +116,7 @@ interface DecryptedCipher {
   cipherKeyEnc: string | null;
   password: string | null;
   username: string | null;
-  fields: Map<string, { value: string; type: number | undefined }>;
+  fields: Map<string, { label: string; value: string | null; type: number | undefined }>;
   /** Original EncStrings, so writeKey can echo back sibling fields it isn't
    *  touching instead of accidentally clearing them on PUT. */
   raw: {
@@ -583,7 +583,7 @@ export class BitwardenProvider implements Provider {
       throw new BitwardenApiError(404, `field '${ref.parts.field}' not found`);
     }
     return {
-      value: v.value,
+      value: v.value ?? "",
       alwaysVisible: field !== "password" && (v.type === 0 || v.type === 2),
     };
   }
@@ -740,20 +740,47 @@ export class BitwardenProvider implements Provider {
           !other.folderName || matchesCipherName(other, namedParts)
         ));
         const parts = conflicts ? { id: cipher.id, field: namedParts.field } : namedParts;
-        const ref: ProviderRef = { provider: this.id, raw: this.formatRef(parts), parts };
+        const namedLabel = this.formatRef(namedParts).slice(2, -2);
+        const ref: ProviderRef = {
+          provider: this.id,
+          raw: this.formatRef(parts),
+          parts,
+          projectLabel: namedLabel.slice(0, -(namedParts.field.length + 1)),
+        };
         if (group.length > 1) {
           const date = Number.isFinite(cipher.createdAt)
             ? new Date(cipher.createdAt).toLocaleString()
             : "";
-          ref.suggestionLabel = [
-            this.formatRef(namedParts).slice(2, -2),
-            date,
-            cipher.id.slice(-8),
-          ].filter(Boolean).join(" · ");
+          const metadata = [date, cipher.id.slice(-8)].filter(Boolean);
+          ref.suggestionLabel = [namedLabel, ...metadata].join(" · ");
+          ref.projectLabel = [ref.projectLabel, ...metadata].join(" · ");
           ref.suggestionGroup = name;
         }
         refs.push(ref);
       }
+    }
+    return refs;
+  }
+
+  async listFields(ref: ProviderRef): Promise<ProviderRef[]> {
+    const cipher = findCipher(await this.getCiphers(), ref.parts);
+    if (!cipher) throw new BitwardenApiError(404, "selected item not found");
+
+    const labels: string[] = [];
+    if (cipher.type === 1 && cipher.password !== null) labels.push("password");
+    if (cipher.username !== null) labels.push("username");
+    for (const [name, field] of cipher.fields) {
+      // These names resolve to built-in fields instead of the custom field.
+      if (name === "username" || (name === "password" && cipher.type === 1)) continue;
+      // Linked fields need indirection that readForDisplay does not support.
+      if (field.value !== null && field.type !== 3) labels.push(field.label);
+    }
+
+    const refs: ProviderRef[] = [];
+    for (const field of labels) {
+      const parts = { ...ref.parts, field };
+      const raw = this.formatRef(parts);
+      if (this.parseRef(raw)?.raw === raw) refs.push({ provider: this.id, raw, parts });
     }
     return refs;
   }
@@ -946,7 +973,7 @@ export class BitwardenProvider implements Provider {
         const fname = await safeDecrypt(itemKey, f.Name);
         if (fname === null) continue;
         const fval = f.Value ? await safeDecrypt(itemKey, f.Value) : "";
-        fields.set(fname.toLowerCase(), { value: fval ?? "", type: f.Type });
+        fields.set(fname.toLowerCase(), { label: fname, value: fval, type: f.Type });
         rawFields.set(fname.toLowerCase(), {
           nameEnc: f.Name,
           valueEnc: f.Value ?? null,

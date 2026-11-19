@@ -109,6 +109,8 @@ export const zh: Messages = {
   "modal.refEditor.optional": "{label}（可选）",
 
   // 密钥浏览模态框
+  "modal.secretBrowser.fieldPlaceholder": "搜索字段…",
+  "modal.secretBrowser.noFields": "这个项目没有可引用的字段。",
   "modal.secretBrowser.searchPlaceholder": "搜索密钥…",
 
   // 密钥内联元素

@@ -109,6 +109,8 @@ export const zhTW: Messages = {
   "modal.refEditor.optional": "{label}（選填）",
 
   // 密鑰瀏覽模態視窗
+  "modal.secretBrowser.fieldPlaceholder": "搜尋欄位…",
+  "modal.secretBrowser.noFields": "這個項目沒有可引用的欄位。",
   "modal.secretBrowser.searchPlaceholder": "搜尋密鑰…",
 
   // 密鑰內嵌元素

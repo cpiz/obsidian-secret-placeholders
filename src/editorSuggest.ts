@@ -16,14 +16,20 @@ import {
   EditorSuggest,
   EditorSuggestContext,
   EditorSuggestTriggerInfo,
+  Notice,
   TFile,
 } from "obsidian";
 
+import { t } from "./i18n";
 import type SecretPlaceholdersPlugin from "./main";
 import { preparePinyinSearch } from "./pinyinSearch";
 import type { Provider, ProviderRef } from "./providers/types";
 
 const CACHE_TTL_MS = 60_000;
+
+function candidateLabel(ref: ProviderRef): string {
+  return ref.projectLabel ?? ref.suggestionLabel ?? ref.raw.slice(2, -2);
+}
 
 function searchProviderRefs(refs: ProviderRef[], query: string): ProviderRef[] {
   if (!query) return refs;
@@ -33,9 +39,10 @@ function searchProviderRefs(refs: ProviderRef[], query: string): ProviderRef[] {
   const originalGroups = new Set<string>();
 
   for (const ref of refs) {
-    const label = ref.suggestionLabel ?? ref.raw.slice(2, -2);
+    const label = candidateLabel(ref);
+    const address = ref.projectLabel === undefined ? ref.raw : ref.raw.split("#", 1)[0];
     const original = label.toLowerCase().includes(filter) ||
-      ref.raw.toLowerCase().includes(filter);
+      address.toLowerCase().includes(filter);
     if (!original && !matchesPinyin?.(label)) continue;
     matches.push({ ref, original });
     if (original && ref.suggestionGroup !== undefined) {
@@ -62,7 +69,7 @@ interface ProviderCache {
 
 type Suggestion =
   | { kind: "provider"; provider: Provider; label: string }
-  | { kind: "ref"; provider: Provider; ref: ProviderRef; label: string };
+  | { kind: "ref" | "field"; provider: Provider; ref: ProviderRef; label: string };
 
 export class SecretEditorSuggest extends EditorSuggest<Suggestion> {
   private caches = new Map<string, ProviderCache>();
@@ -113,13 +120,32 @@ export class SecretEditorSuggest extends EditorSuggest<Suggestion> {
       const prefixWithColon = `${query.slice(0, colon)}:`;
       const provider = this.providerByPrefix(prefixWithColon);
       if (!provider) return [];
+      const separator = query.indexOf("#", colon + 1);
+      if (provider.listFields && separator >= 0) {
+        // Parse only the project address. A complete reference needs a
+        // non-empty field, even when the user has only typed the separator.
+        const raw = `{{${query.slice(0, separator + 1)}_}}`;
+        const project = provider.parseRef(raw);
+        if (project?.raw !== raw) return [];
+        const filter = query.slice(separator + 1).toLowerCase();
+        try {
+          const fields = await provider.listFields(project);
+          return fields
+            .filter((ref) => ref.parts.field.toLowerCase().includes(filter))
+            .slice(0, 50)
+            .map((ref) => ({ kind: "field" as const, provider, ref, label: ref.parts.field }));
+        } catch {
+          // Missing or ambiguous project names are common while typing.
+          return [];
+        }
+      }
       const refs = await this.getRefs(provider);
       const matches = searchProviderRefs(refs, query.slice(colon + 1));
       return matches.slice(0, 50).map((ref) => ({
         kind: "ref" as const,
         provider,
         ref,
-        label: ref.suggestionLabel ?? ref.raw.slice(2, -2),
+        label: candidateLabel(ref),
       }));
     }
 
@@ -153,7 +179,7 @@ export class SecretEditorSuggest extends EditorSuggest<Suggestion> {
           continue;
         }
         for (const ref of refs) {
-          const label = ref.suggestionLabel ?? ref.raw.slice(2, -2);
+          const label = candidateLabel(ref);
           if (!label.toLowerCase().includes(filter)) continue;
           // De-duplicate refs that share the same raw text across providers
           // (unlikely but defensive).
@@ -202,15 +228,51 @@ export class SecretEditorSuggest extends EditorSuggest<Suggestion> {
       const trigger = this.onTrigger(editor.getCursor(), editor, null);
       if (!trigger || trigger.start.line !== start.line || trigger.start.ch !== start.ch) return;
       const { end: cursor } = trigger;
-      const suffix = editor.getLine(cursor.line).slice(cursor.ch);
+      const line = editor.getLine(cursor.line);
+      const suffix = line.slice(cursor.ch);
       // Replace the whole search fragment, including any remaining text
       // in its closing braces. Stop before another brace-delimited fragment.
       const closingTail = /^(?:[^{}]*\}\}|\})/.exec(suffix)?.[0] ?? "";
-      editor.replaceRange(s.ref.raw, start, {
+      const replacementEnd = {
         line: cursor.line,
         ch: cursor.ch + closingTail.length,
-      });
-      editor.setCursor({ line: start.line, ch: start.ch + s.ref.raw.length });
+      };
+      const searchText = line.slice(start.ch, replacementEnd.ch);
+      const canInsert = () => {
+        const current = editor.getCursor();
+        return current.line === cursor.line && current.ch === cursor.ch &&
+          editor.getLine(cursor.line).slice(start.ch, replacementEnd.ch) === searchText;
+      };
+      const insert = (ref: ProviderRef) => {
+        editor.replaceRange(ref.raw, start, replacementEnd);
+        editor.setCursor({ line: start.line, ch: start.ch + ref.raw.length });
+      };
+      if (s.kind === "field" || !s.provider.listFields) {
+        if (canInsert()) insert(s.ref);
+      } else {
+        void (async () => {
+          try {
+            const fields = await s.provider.listFields?.(s.ref);
+            if (!fields || !canInsert()) return;
+            if (fields.length === 0) {
+              new Notice(t("modal.secretBrowser.noFields"));
+            } else if (fields.length === 1) {
+              insert(fields[0]);
+            } else {
+              // Keep the selected project's exact address, including its ID.
+              // Putting the caret after # triggers the inline field search.
+              const raw = fields[0].raw;
+              const draft = raw.slice(0, raw.indexOf("#") + 1);
+              editor.transaction({
+                changes: [{ from: start, to: replacementEnd, text: `${draft}}}` }],
+                selection: { from: { line: start.line, ch: start.ch + draft.length } },
+              });
+            }
+          } catch (e) {
+            if (canInsert()) new Notice(t("notice.readFailed", { msg: (e as Error).message }));
+          }
+        })();
+      }
     }
   }
 

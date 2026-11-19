@@ -2,7 +2,7 @@
 // the "Browse and insert" / "Browse and copy" commands so the user doesn't
 // have to remember exact paths.
 
-import { App, FuzzySuggestModal, type FuzzyMatch, type SearchMatches } from "obsidian";
+import { App, FuzzySuggestModal, Notice, type FuzzyMatch, type SearchMatches } from "obsidian";
 import { t } from "../i18n";
 import { preparePinyinSearch } from "../pinyinSearch";
 import type SecretPlaceholdersPlugin from "../main";
@@ -35,6 +35,7 @@ export class SecretBrowserModal extends FuzzySuggestModal<Entry> {
     app: App,
     private plugin: SecretPlaceholdersPlugin,
     private onChoose: (entry: Entry) => void | Promise<void>,
+    private chooseProject = false,
   ) {
     super(app);
     this.setPlaceholder(t("modal.secretBrowser.searchPlaceholder"));
@@ -79,7 +80,7 @@ export class SecretBrowserModal extends FuzzySuggestModal<Entry> {
     const matchesPinyin = preparePinyinSearch(query);
     const matches: FuzzyMatch<Entry>[] = [];
     for (const item of this.entries) {
-      const label = item.ref.suggestionLabel ?? item.ref.raw.slice(2, -2);
+      const label = this.candidateLabel(item);
       const direct = literal.exec(label);
       if (direct) {
         matches.push({ item, match: { score: 4, matches: [[direct.index, direct.index + direct[0].length]] } });
@@ -128,11 +129,67 @@ export class SecretBrowserModal extends FuzzySuggestModal<Entry> {
   }
 
   getItemText(item: Entry): string {
-    const label = item.ref.suggestionLabel ?? item.ref.raw.slice(2, -2);
-    return `${label}  (${item.provider.displayName})`;
+    return `${this.candidateLabel(item)}  (${item.provider.displayName})`;
+  }
+
+  private candidateLabel(item: Entry): string {
+    const { ref } = item;
+    if (this.chooseProject && ref.projectLabel !== undefined) return ref.projectLabel;
+    return ref.suggestionLabel ?? ref.raw.slice(2, -2);
   }
 
   onChooseItem(item: Entry): void {
     void this.onChoose(item);
+  }
+}
+
+class SecretFieldPicker extends FuzzySuggestModal<ProviderRef> {
+  constructor(
+    app: App,
+    private refs: ProviderRef[],
+    private onChoose: (ref: ProviderRef) => void,
+  ) {
+    super(app);
+    this.setPlaceholder(t("modal.secretBrowser.fieldPlaceholder"));
+  }
+
+  getItems(): ProviderRef[] {
+    return this.refs;
+  }
+
+  getItemText(ref: ProviderRef): string {
+    return ref.parts.field;
+  }
+
+  onChooseItem(ref: ProviderRef): void {
+    this.onChoose(ref);
+  }
+}
+
+export async function chooseProjectField(
+  app: App,
+  provider: Provider,
+  ref: ProviderRef,
+  select: (ref: ProviderRef) => void,
+  canSelect = () => true,
+): Promise<void> {
+  if (!provider.listFields) {
+    if (canSelect()) select(ref);
+    return;
+  }
+  try {
+    const fields = await provider.listFields(ref);
+    if (!canSelect()) return;
+    if (fields.length === 0) {
+      new Notice(t("modal.secretBrowser.noFields"));
+    } else if (fields.length === 1) {
+      select(fields[0]);
+    } else {
+      new SecretFieldPicker(app, fields, (field) => {
+        if (canSelect()) select(field);
+      }).open();
+    }
+  } catch (e) {
+    if (canSelect()) new Notice(t("notice.readFailed", { msg: (e as Error).message }));
   }
 }

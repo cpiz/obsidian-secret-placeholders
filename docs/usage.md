@@ -53,7 +53,8 @@ Typing `{{` in the editor triggers suggestions:
 - `{{<prefix>:<query>` → the usual per-provider filtered list.
 
 输入 `{{vw:`、`{{1p:` 或 `{{bao:` 后，可用连续文字、全拼或拼音首字母搜索。原文命中优先，Bitwarden 的同名候选按创建时间从旧到新排列。
-合并后最多显示 50 条。选择候选时，当前输入会被完整占位符替换。
+合并后最多显示 50 条。选中 Bitwarden 或 Vaultwarden 项目后，多个可引用字段会在光标旁的小列表中显示，只有一个字段时直接插入。同名项目保留选中的项目 ID。插入时，当前输入会被完整占位符替换。
+也可以手动输入完整项目名，再输入 `#` 查看可引用字段，例如 `{{vw:荧光云利雅得Socks5#`。继续输入字段名可筛选候选。同名项目无法按名称唯一确定时，请先从项目候选中选择。
 
 ## Right-click menu
 
@@ -103,6 +104,7 @@ All commands are under the `Secrets:` prefix in the command palette:
 | Open placeholder index | Open the sidebar index view |
 
 「浏览并插入占位符」和「浏览并复制」支持用汉字、全拼或拼音首字母查找中文项目。
+从 Bitwarden 或 Vaultwarden 浏览并插入或复制时，先选项目，再选可引用的字段。只有一个可引用字段时会直接插入或复制。
 例如「荧光云利雅得Socks5」可以用 `liyade` 或 `lyd` 搜索，命中的「利雅得」会高亮。
 连续原文优先，其次是全拼、跳过分隔符的匹配和拼音首字母。英文和数字搜索可以跳过空格、点、连字符和下划线。同名候选按创建时间从旧到新排列。
 

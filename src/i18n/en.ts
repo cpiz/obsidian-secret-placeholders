@@ -112,6 +112,8 @@ export const en = {
   "modal.refEditor.optional": "{label} (optional)",
 
   // Secret browser modal
+  "modal.secretBrowser.fieldPlaceholder": "Search fields…",
+  "modal.secretBrowser.noFields": "This project has no fields that can be referenced.",
   "modal.secretBrowser.searchPlaceholder": "Search secrets…",
 
   // Secret span

@@ -109,6 +109,8 @@ export const ja: Messages = {
   "modal.refEditor.optional": "{label}（任意）",
 
   // シークレットブラウザーモーダル
+  "modal.secretBrowser.fieldPlaceholder": "フィールドを検索…",
+  "modal.secretBrowser.noFields": "この項目に参照できるフィールドはありません。",
   "modal.secretBrowser.searchPlaceholder": "シークレットを検索…",
 
   // シークレットスパン

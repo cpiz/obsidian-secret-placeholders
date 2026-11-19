@@ -110,6 +110,8 @@ export const it: Messages = {
   "modal.refEditor.optional": "{label} (facoltativo)",
 
   // Modale browser segreti
+  "modal.secretBrowser.fieldPlaceholder": "Cerca campi…",
+  "modal.secretBrowser.noFields": "Questo elemento non ha campi che possono essere referenziati.",
   "modal.secretBrowser.searchPlaceholder": "Cerca segreti…",
 
   // Span segreto

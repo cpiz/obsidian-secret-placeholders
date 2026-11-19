@@ -15,6 +15,8 @@ export interface ProviderRef {
   parts: Record<string, string>;
   /** Searchable candidate label when the raw reference does not contain the title. */
   suggestionLabel?: string;
+  /** Candidate label for choosing the project before its field. */
+  projectLabel?: string;
   /** Candidates in the same group keep the provider's listing order. */
   suggestionGroup?: string;
 }
@@ -93,6 +95,8 @@ export interface Provider {
   /** Best-effort enumeration for autocomplete / browser modal. May return
    *  an empty list if the provider can't enumerate cheaply. */
   list(prefix?: string): Promise<ProviderRef[]>;
+  /** List the readable field references for a project selected from list(). */
+  listFields?(ref: ProviderRef): Promise<ProviderRef[]>;
 
   clearCache(): void;
   dispose?(): void;
