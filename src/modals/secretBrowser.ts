@@ -3,6 +3,7 @@
 // have to remember exact paths.
 
 import { App, FuzzySuggestModal, type FuzzyMatch } from "obsidian";
+import { match as matchPinyin } from "pinyin-pro";
 import { t } from "../i18n";
 import type SecretPlaceholdersPlugin from "../main";
 import type { Provider, ProviderRef } from "../providers/types";
@@ -52,6 +53,19 @@ export class SecretBrowserModal extends FuzzySuggestModal<Entry> {
 
   getSuggestions(query: string): FuzzyMatch<Entry>[] {
     const matches = super.getSuggestions(query);
+    const pinyinQuery = query.trim().toLowerCase();
+    if (/[a-z]/.test(pinyinQuery)) {
+      const matchedItems = new Set(matches.map(({ item }) => item));
+      for (const item of this.entries) {
+        if (matchedItems.has(item)) continue;
+        const label = item.ref.suggestionLabel ?? item.ref.raw.slice(2, -2);
+        if (!/\p{Script=Han}/u.test(label)) continue;
+        if (matchPinyin(label, pinyinQuery, { continuous: true, v: true })) {
+          matches.push({ item, match: { score: 0, matches: [] } });
+        }
+      }
+    }
+
     const groups = new Map<string, FuzzyMatch<Entry>[]>();
     for (const match of matches) {
       const { provider, ref } = match.item;
@@ -64,8 +78,8 @@ export class SecretBrowserModal extends FuzzySuggestModal<Entry> {
     for (const group of groups.values()) {
       group.sort((a, b) => b.item.order - a.item.order);
     }
-    // Keep fuzzy relevance between different names and restore the
-    // provider's order within each group of same-name matches.
+    // Keep result positions between groups, then restore the provider's
+    // order within each group of same-name matches.
     return matches.map((match) => {
       const { provider, ref } = match.item;
       if (ref.suggestionGroup === undefined) return match;

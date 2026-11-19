@@ -99,6 +99,9 @@ All commands are under the `Secrets:` prefix in the command palette:
 | Copy secret under cursor | Copy the value of the placeholder at the cursor |
 | Open placeholder index | Open the sidebar index view |
 
+「浏览并插入占位符」和「浏览并复制」支持用汉字、全拼或拼音首字母查找中文项目。
+例如「荧光云利雅得Socks5」可以用 `liyade` 或 `lyd` 搜索。原文匹配优先，同名候选按创建时间从旧到新排列。
+
 ## Settings reference
 
 **Display**
