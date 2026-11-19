@@ -3,8 +3,8 @@
 // have to remember exact paths.
 
 import { App, FuzzySuggestModal, type FuzzyMatch } from "obsidian";
-import { match as matchPinyin } from "pinyin-pro";
 import { t } from "../i18n";
+import { preparePinyinSearch } from "../pinyinSearch";
 import type SecretPlaceholdersPlugin from "../main";
 import type { Provider, ProviderRef } from "../providers/types";
 
@@ -53,14 +53,13 @@ export class SecretBrowserModal extends FuzzySuggestModal<Entry> {
 
   getSuggestions(query: string): FuzzyMatch<Entry>[] {
     const matches = super.getSuggestions(query);
-    const pinyinQuery = query.trim().toLowerCase();
-    if (/[a-z]/.test(pinyinQuery)) {
+    const matchesPinyin = preparePinyinSearch(query);
+    if (matchesPinyin) {
       const matchedItems = new Set(matches.map(({ item }) => item));
       for (const item of this.entries) {
         if (matchedItems.has(item)) continue;
         const label = item.ref.suggestionLabel ?? item.ref.raw.slice(2, -2);
-        if (!/\p{Script=Han}/u.test(label)) continue;
-        if (matchPinyin(label, pinyinQuery, { continuous: true, v: true })) {
+        if (matchesPinyin(label)) {
           matches.push({ item, match: { score: 0, matches: [] } });
         }
       }

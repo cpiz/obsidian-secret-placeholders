@@ -4,7 +4,7 @@
 //   2. `{{<text>` (no colon)    -> cross-provider fuzzy search across every
 //                                  provider's list(), plus any providers
 //                                  whose prefix starts with <text>
-//   3. `{{<prefix>:<query>`     -> per-provider list (existing behaviour)
+//   3. `{{<prefix>:<query>`     -> per-provider search
 //
 // Each provider's list() result is cached for 60s to avoid hitting the
 // backend on every keystroke.
@@ -20,9 +20,44 @@ import {
 } from "obsidian";
 
 import type SecretPlaceholdersPlugin from "./main";
+import { preparePinyinSearch } from "./pinyinSearch";
 import type { Provider, ProviderRef } from "./providers/types";
 
 const CACHE_TTL_MS = 60_000;
+
+function searchProviderRefs(
+  refs: ProviderRef[],
+  query: string,
+  includePinyin: boolean,
+): ProviderRef[] {
+  if (!query) return refs;
+  const filter = query.toLowerCase();
+  const matchesPinyin = includePinyin ? preparePinyinSearch(query) : null;
+  const matches: { ref: ProviderRef; original: boolean }[] = [];
+  const originalGroups = new Set<string>();
+
+  for (const ref of refs) {
+    const label = ref.suggestionLabel ?? ref.raw.slice(2, -2);
+    const original = label.toLowerCase().includes(filter) ||
+      ref.raw.toLowerCase().includes(filter);
+    if (!original && !matchesPinyin?.(label)) continue;
+    matches.push({ ref, original });
+    if (original && ref.suggestionGroup !== undefined) {
+      originalGroups.add(ref.suggestionGroup);
+    }
+  }
+
+  const first: ProviderRef[] = [];
+  const rest: ProviderRef[] = [];
+  for (const { ref, original } of matches) {
+    // Use the best match in each same-name group to rank it, while
+    // keeping the provider's creation order within the group.
+    const hasOriginal = original ||
+      (ref.suggestionGroup !== undefined && originalGroups.has(ref.suggestionGroup));
+    (hasOriginal ? first : rest).push(ref);
+  }
+  return first.concat(rest);
+}
 
 interface ProviderCache {
   fetchedAt: number;
@@ -78,18 +113,12 @@ export class SecretEditorSuggest extends EditorSuggest<Suggestion> {
     const query = ctx.query;
     const colon = query.indexOf(":");
     if (colon >= 0) {
-      // Mode 3: per-provider list (existing behaviour).
+      // Mode 3: per-provider search.
       const prefixWithColon = `${query.slice(0, colon)}:`;
       const provider = this.providerByPrefix(prefixWithColon);
       if (!provider) return [];
       const refs = await this.getRefs(provider);
-      const filter = query.slice(colon + 1).toLowerCase();
-      const matches = filter
-        ? refs.filter((r) =>
-          (r.suggestionLabel ?? r.raw).toLowerCase().includes(filter) ||
-          r.raw.toLowerCase().includes(filter),
-        )
-        : refs;
+      const matches = searchProviderRefs(refs, query.slice(colon + 1), provider.id === "vw");
       return matches.slice(0, 50).map((ref) => ({
         kind: "ref" as const,
         provider,
@@ -174,17 +203,18 @@ export class SecretEditorSuggest extends EditorSuggest<Suggestion> {
         ch: start.ch + inserted.length,
       });
     } else {
-      // s.ref.raw already ends with `}}`.  Obsidian's "Auto pair brackets"
-      // may have inserted a `}}` right after the cursor when the user
-      // typed `{{`; swallow up to two trailing `}` so the result isn't
-      // `...}}}}`.
-      const lineText = editor.getLine(end.line);
-      let trailing = 0;
-      while (trailing < 2 && lineText[end.ch + trailing] === "}") trailing++;
+      const trigger = this.onTrigger(editor.getCursor(), editor, null);
+      if (!trigger || trigger.start.line !== start.line || trigger.start.ch !== start.ch) return;
+      const { end: cursor } = trigger;
+      const suffix = editor.getLine(cursor.line).slice(cursor.ch);
+      // Replace the whole search fragment, including any remaining text
+      // in its closing braces. Stop before another brace-delimited fragment.
+      const closingTail = /^(?:[^{}]*\}\}|\})/.exec(suffix)?.[0] ?? "";
       editor.replaceRange(s.ref.raw, start, {
-        line: end.line,
-        ch: end.ch + trailing,
+        line: cursor.line,
+        ch: cursor.ch + closingTail.length,
       });
+      editor.setCursor({ line: start.line, ch: start.ch + s.ref.raw.length });
     }
   }
 
