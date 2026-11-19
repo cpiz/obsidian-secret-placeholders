@@ -778,6 +778,7 @@ export class BitwardenProvider implements Provider {
 
     const out: DecryptedCipher[] = [];
     for (const c of res.Ciphers ?? []) {
+      if (c.DeletedDate) continue;
       // Only login-type ciphers carry .Login (password + username). Custom
       // fields exist on every cipher type, so we still surface them.
       if (c.Type !== 1 && c.Type !== 2) continue;

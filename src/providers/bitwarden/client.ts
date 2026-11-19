@@ -110,6 +110,7 @@ export interface SyncCipher {
   /** EncString of the secure-note text body. */
   Notes?: string | null;
   CreationDate: string | null;
+  DeletedDate: string | null;
   /** ISO timestamp. */
   RevisionDate: string;
 }
@@ -515,6 +516,7 @@ function normalizeCipher(raw: unknown): SyncCipher {
     Fields: fieldsRaw.map(normalizeField),
     Notes: pick<string | null>(r, "Notes", "notes") ?? null,
     CreationDate: pick<string | null>(r, "CreationDate", "creationDate") ?? null,
+    DeletedDate: pick<string | null>(r, "DeletedDate", "deletedDate") ?? null,
     RevisionDate: pick<string>(r, "RevisionDate", "revisionDate") ?? "",
   };
 }
