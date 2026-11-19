@@ -103,7 +103,8 @@ All commands are under the `Secrets:` prefix in the command palette:
 | Open placeholder index | Open the sidebar index view |
 
 「浏览并插入占位符」和「浏览并复制」支持用汉字、全拼或拼音首字母查找中文项目。
-例如「荧光云利雅得Socks5」可以用 `liyade` 或 `lyd` 搜索。原文匹配优先，同名候选按创建时间从旧到新排列。
+例如「荧光云利雅得Socks5」可以用 `liyade` 或 `lyd` 搜索，命中的「利雅得」会高亮。
+连续原文优先，其次是全拼、跳过分隔符的匹配和拼音首字母。英文和数字搜索可以跳过空格、点、连字符和下划线。同名候选按创建时间从旧到新排列。
 
 ## Settings reference
 

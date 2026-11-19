@@ -1,8 +1,8 @@
-// Fuzzy-search across known secrets from every enabled provider.  Used by
+// Search across known secrets from every enabled provider. Used by
 // the "Browse and insert" / "Browse and copy" commands so the user doesn't
 // have to remember exact paths.
 
-import { App, FuzzySuggestModal, type FuzzyMatch } from "obsidian";
+import { App, FuzzySuggestModal, type FuzzyMatch, type SearchMatches } from "obsidian";
 import { t } from "../i18n";
 import { preparePinyinSearch } from "../pinyinSearch";
 import type SecretPlaceholdersPlugin from "../main";
@@ -12,6 +12,20 @@ interface Entry {
   provider: Provider;
   ref: ProviderRef;
   order: number;
+}
+
+function highlightPinyin(label: string, positions: number[]): SearchMatches {
+  const ranges: SearchMatches = [];
+  for (const start of positions) {
+    const end = start + ((label.codePointAt(start) ?? 0) > 0xffff ? 2 : 1);
+    const last = ranges[ranges.length - 1];
+    if (last && start <= last[1]) {
+      last[1] = Math.max(last[1], end);
+    } else {
+      ranges.push([start, end]);
+    }
+  }
+  return ranges;
 }
 
 export class SecretBrowserModal extends FuzzySuggestModal<Entry> {
@@ -52,19 +66,46 @@ export class SecretBrowserModal extends FuzzySuggestModal<Entry> {
   }
 
   getSuggestions(query: string): FuzzyMatch<Entry>[] {
-    const matches = super.getSuggestions(query);
+    const text = query.trim();
+    if (!text) {
+      return this.entries.map((item) => ({ item, match: { score: 0, matches: [] } }));
+    }
+    const literal = new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "iu");
+    const compact = /^[a-z0-9 ._-]+$/i.test(text) ? text.replace(/[ ._-]/g, "") : "";
+    const separated = compact.length > 1
+      ? new RegExp(compact.split("").join("[ ._-]*"), "i")
+      : null;
+    const fullPinyin = preparePinyinSearch(query, true);
     const matchesPinyin = preparePinyinSearch(query);
-    if (matchesPinyin) {
-      const matchedItems = new Set(matches.map(({ item }) => item));
-      for (const item of this.entries) {
-        if (matchedItems.has(item)) continue;
-        const label = item.ref.suggestionLabel ?? item.ref.raw.slice(2, -2);
-        if (matchesPinyin(label)) {
-          matches.push({ item, match: { score: 0, matches: [] } });
-        }
+    const matches: FuzzyMatch<Entry>[] = [];
+    for (const item of this.entries) {
+      const label = item.ref.suggestionLabel ?? item.ref.raw.slice(2, -2);
+      const direct = literal.exec(label);
+      if (direct) {
+        matches.push({ item, match: { score: 4, matches: [[direct.index, direct.index + direct[0].length]] } });
+        continue;
+      }
+
+      // Search the title and path separately from the field and display metadata.
+      const location = label.split("#", 1)[0];
+      const full = fullPinyin?.(location);
+      if (full) {
+        matches.push({ item, match: { score: 3, matches: highlightPinyin(label, full) } });
+        continue;
+      }
+      const acrossSeparators = separated?.exec(location);
+      if (acrossSeparators) {
+        const { index } = acrossSeparators;
+        matches.push({ item, match: { score: 2, matches: [[index, index + acrossSeparators[0].length]] } });
+        continue;
+      }
+      const initials = matchesPinyin?.(location);
+      if (initials) {
+        matches.push({ item, match: { score: 1, matches: highlightPinyin(label, initials) } });
       }
     }
 
+    matches.sort((a, b) => b.match.score - a.match.score);
     const groups = new Map<string, FuzzyMatch<Entry>[]>();
     for (const match of matches) {
       const { provider, ref } = match.item;
