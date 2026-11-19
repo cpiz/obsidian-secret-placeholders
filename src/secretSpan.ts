@@ -34,6 +34,8 @@ export function renderSecretSpan(
   // ever have one element child - `activeDocument.createSpan()` throws
   // "Only one element on document allowed".  We want a detached span created
   // in the active window's document (popout compat).
+  // eslint-disable-next-line eslint-comments/no-restricted-disable -- Allow this one popout DOM exception.
+  // eslint-disable-next-line obsidianmd/prefer-create-el -- Create a detached span in the active window's document.
   const span = activeDocument.createElement("span");
   span.className = "sp-secret";
   span.dataset.provider = provider.id;
