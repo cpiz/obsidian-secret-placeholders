@@ -148,6 +148,11 @@ Notes:
   folder separator). Rename the item, or reference it by its provider
   UUID instead of its name.
 
+### 1Password Connect 同名项目
+
+同一保险库内的项目名称按大小写不敏感的方式匹配。名称唯一时，浏览插入和自动补全沿用 `{{1p:保险库名/项目名#password}}`。发生冲突时，候选按创建时间从旧到新排列，创建时间缺失的项目排在最后，选择任意一条都会插入 `{{1p:保险库ID/项目ID#password}}`。
+已有名称占位符匹配到多条时，读写都会提示重新选择。
+
 ### Bitwarden 同名项目
 
 名称匹配忽略大小写。名称占位符指定目录时，在该目录内匹配；省略目录时，跨目录匹配。

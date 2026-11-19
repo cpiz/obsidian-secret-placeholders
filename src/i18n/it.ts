@@ -236,6 +236,8 @@ export const it: Messages = {
     "Per quanto tempo gli item 1Password risolti restano in memoria.",
 
   // Provider — messaggi d'errore mostrati all'utente (via notifiche)
+  "provider.onepassword.ambiguousItem":
+    "Più elementi 1Password corrispondono a «{item}». Seleziona di nuovo l’elemento per inserire un riferimento tramite ID.",
   "provider.onepassword.notLoggedIn": "Accesso a 1Password non effettuato",
   "provider.onepassword.urlNotConfigured":
     "URL di 1Password Connect non configurato",

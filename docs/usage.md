@@ -52,7 +52,7 @@ Typing `{{` in the editor triggers suggestions:
   provider's secrets at once, each result labelled with its provider.
 - `{{<prefix>:<query>` → the usual per-provider filtered list.
 
-输入 `{{vw:`、`{{1p:` 或 `{{bao:` 后，可用连续文字、全拼或拼音首字母搜索。原文命中优先，Bitwarden 的同名候选按创建时间从旧到新排列。
+输入 `{{vw:`、`{{1p:` 或 `{{bao:` 后，可用连续文字、全拼或拼音首字母搜索。原文命中优先，Bitwarden 和 1Password 的同名候选按创建时间从旧到新排列。
 合并后最多显示 50 条。选中 Bitwarden 或 Vaultwarden 项目后，多个可引用字段会在光标旁的小列表中显示，只有一个字段时直接插入。同名项目保留选中的项目 ID。插入时，当前输入会被完整占位符替换。
 也可以手动输入完整项目名，再输入 `#` 查看可引用字段，例如 `{{vw:荧光云利雅得Socks5#`。继续输入字段名可筛选候选。同名项目无法按名称唯一确定时，请先从项目候选中选择。
 

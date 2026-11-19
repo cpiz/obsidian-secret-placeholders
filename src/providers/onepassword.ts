@@ -47,6 +47,7 @@ interface OpItem {
   title: string;
   vault: { id: string };
   category?: string;
+  createdAt?: string;
   fields?: OpField[];
 }
 
@@ -80,6 +81,11 @@ function slugify(s: string): string {
     .slice(0, 60);
 }
 
+function creationTime(item: OpItem): number {
+  const time = Date.parse(item.createdAt ?? "");
+  return Number.isFinite(time) ? time : Infinity;
+}
+
 // --- client --------------------------------------------------------------
 
 class OnePasswordError extends Error {
@@ -95,8 +101,8 @@ class OnePasswordError extends Error {
 class OnePasswordClient {
   // Cache: vault id by lookup-key (lower-cased name or id).
   private vaultIdCache = new Map<string, string>();
-  // Cache: item id by (vaultId, title).
-  private itemIdCache = new Map<string, string>();
+  // Share concurrent listings without retaining stale name-to-ID mappings.
+  private itemLists = new Map<string, Promise<OpItem[]>>();
   // Cache: full item by id, with expiry.
   private itemCache = new Map<string, { expires: number; item: OpItem }>();
 
@@ -108,7 +114,7 @@ class OnePasswordClient {
 
   clearCache(): void {
     this.vaultIdCache.clear();
-    this.itemIdCache.clear();
+    this.itemLists.clear();
     this.itemCache.clear();
   }
 
@@ -170,21 +176,27 @@ class OnePasswordClient {
   }
 
   async listItems(vaultId: string): Promise<OpItem[]> {
-    return this.request<OpItem[]>("GET", `vaults/${vaultId}/items`);
+    const pending = this.itemLists.get(vaultId);
+    if (pending) return pending;
+    const request = this.request<OpItem[]>("GET", `vaults/${vaultId}/items`);
+    this.itemLists.set(vaultId, request);
+    try {
+      return await request;
+    } finally {
+      if (this.itemLists.get(vaultId) === request) this.itemLists.delete(vaultId);
+    }
   }
 
-  async resolveItemId(vaultId: string, itemRef: string): Promise<string> {
+  async resolveItemId(vaultId: string, itemRef: string): Promise<string | undefined> {
     if (/^[A-Za-z0-9]{26}$/.test(itemRef)) return itemRef;
-    const cacheKey = `${vaultId}/${itemRef.toLowerCase()}`;
-    const cached = this.itemIdCache.get(cacheKey);
-    if (cached) return cached;
+    const title = itemRef.toLowerCase();
     const items = await this.listItems(vaultId);
-    for (const it of items) {
-      this.itemIdCache.set(`${vaultId}/${it.title.toLowerCase()}`, it.id);
+    const matches = items.filter((item) => item.title.toLowerCase() === title);
+    if (matches.length > 1) {
+      const message = t("provider.onepassword.ambiguousItem", { item: itemRef });
+      throw new OnePasswordError(409, message, message);
     }
-    const id = this.itemIdCache.get(cacheKey);
-    if (!id) throw new OnePasswordError(404, `item '${itemRef}' not found`);
-    return id;
+    return matches[0]?.id;
   }
 
   async getItem(vaultId: string, itemId: string): Promise<OpItem> {
@@ -210,6 +222,7 @@ class OnePasswordClient {
   ): Promise<string> {
     const vaultId = await this.resolveVaultId(vaultRef);
     const itemId = await this.resolveItemId(vaultId, itemRef);
+    if (!itemId) throw new OnePasswordError(404, `item '${itemRef}' not found`);
     const item = await this.getItem(vaultId, itemId);
     const label = fieldLabel.toLowerCase();
     for (const f of item.fields ?? []) {
@@ -237,12 +250,7 @@ class OnePasswordClient {
     value: string,
   ): Promise<void> {
     const vaultId = await this.resolveVaultId(vaultRef);
-    let itemId: string | null = null;
-    try {
-      itemId = await this.resolveItemId(vaultId, itemRef);
-    } catch (e) {
-      if (!(e instanceof OnePasswordError) || e.status !== 404) throw e;
-    }
+    const itemId = await this.resolveItemId(vaultId, itemRef);
     if (itemId) {
       // Patch existing item: add or replace the field.
       const item = await this.getItem(vaultId, itemId);
@@ -265,7 +273,7 @@ class OnePasswordClient {
       return;
     }
     // Create new item.
-    const created = await this.request<OpItem>(
+    await this.request<OpItem>(
       "POST",
       `vaults/${vaultId}/items`,
       {
@@ -280,10 +288,6 @@ class OnePasswordClient {
           },
         ],
       },
-    );
-    this.itemIdCache.set(
-      `${vaultId}/${itemRef.toLowerCase()}`,
-      created.id,
     );
   }
 }
@@ -433,20 +437,29 @@ export class OnePasswordProvider implements Provider {
       const items: OpItem[] = await this.client
         .listItems(v.id)
         .catch(() => [] as OpItem[]);
-      for (const it of items.slice(0, 100)) {
-        // We don't fetch full items for the autocomplete list - that would
-        // be N+1 requests.  Default to surfacing the conventional
-        // "password" field; the user can edit the placeholder to point at
-        // any other field on the same item.
-        out.push({
-          provider: this.id,
-          raw: this.formatRef({
-            vault: v.name,
-            item: it.title,
-            field: "password",
-          }),
-          parts: { vault: v.name, item: it.title, field: "password" },
-        });
+      const groups = new Map<string, OpItem[]>();
+      for (const item of items) {
+        const title = item.title.toLowerCase();
+        const group = groups.get(title) ?? [];
+        group.push(item);
+        groups.set(title, group);
+      }
+      for (const [title, group] of groups) {
+        group.sort((a, b) => creationTime(a) - creationTime(b) || a.id.localeCompare(b.id));
+        for (const item of group) {
+          const named = { vault: v.name, item: item.title, field: "password" };
+          const parts = group.length > 1 ? { ...named, vault: v.id, item: item.id } : named;
+          const ref: ProviderRef = { provider: this.id, raw: this.formatRef(parts), parts };
+          if (group.length > 1) {
+            const time = creationTime(item);
+            const date = Number.isFinite(time) ? new Date(time).toLocaleString() : "";
+            ref.suggestionLabel = [
+              this.formatRef(named).slice(2, -2), date, item.id.slice(-8),
+            ].filter(Boolean).join(" · ");
+            ref.suggestionGroup = `${v.id}/${title}`;
+          }
+          out.push(ref);
+        }
       }
     }
     return out;

@@ -238,6 +238,8 @@ export const en = {
     "How long resolved 1Password items are kept in memory.",
 
   // Provider — user-facing error messages (surfaced via notices)
+  "provider.onepassword.ambiguousItem":
+    "Multiple 1Password items match \"{item}\". Select the item again to insert an ID reference.",
   "provider.onepassword.notLoggedIn": "Not logged in to 1Password",
   "provider.onepassword.urlNotConfigured":
     "1Password Connect URL not configured",

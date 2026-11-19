@@ -235,6 +235,8 @@ export const ja: Messages = {
     "解決された 1Password アイテムをメモリに保持する時間。",
 
   // プロバイダー — ユーザー向けエラーメッセージ（通知で表示）
+  "provider.onepassword.ambiguousItem":
+    "「{item}」に一致する 1Password 項目が複数あります。項目を選び直して ID 参照を挿入してください。",
   "provider.onepassword.notLoggedIn": "1Password にログインしていません",
   "provider.onepassword.urlNotConfigured":
     "1Password Connect URL が設定されていません",

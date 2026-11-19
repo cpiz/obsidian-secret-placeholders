@@ -235,6 +235,8 @@ export const zh: Messages = {
     "解析后的 1Password 项目在内存中保留多长时间。",
 
   // 提供方 — 面向用户的错误消息（通过通知显示）
+  "provider.onepassword.ambiguousItem":
+    "找到多个匹配「{item}」的 1Password 项目。请重新选择项目并插入 ID 占位符。",
   "provider.onepassword.notLoggedIn": "未登录到 1Password",
   "provider.onepassword.urlNotConfigured":
     "未配置 1Password Connect URL",

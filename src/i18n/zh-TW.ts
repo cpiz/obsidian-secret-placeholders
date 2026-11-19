@@ -235,6 +235,8 @@ export const zhTW: Messages = {
     "解析後的 1Password 項目在記憶體中保留多久。",
 
   // 提供方 — 面向使用者的錯誤訊息（透過通知顯示）
+  "provider.onepassword.ambiguousItem":
+    "找到多個符合「{item}」的 1Password 項目。請重新選擇項目並插入 ID 佔位符。",
   "provider.onepassword.notLoggedIn": "尚未登入 1Password",
   "provider.onepassword.urlNotConfigured":
     "未設定 1Password Connect URL",

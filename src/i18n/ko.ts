@@ -235,6 +235,8 @@ export const ko: Messages = {
     "확인된 1Password 항목을 메모리에 유지하는 시간입니다.",
 
   // 제공자 — 사용자에게 표시되는 오류 메시지(알림으로 표시)
+  "provider.onepassword.ambiguousItem":
+    "‘{item}’에 해당하는 1Password 항목이 여러 개입니다. 항목을 다시 선택하여 ID 참조를 삽입하세요.",
   "provider.onepassword.notLoggedIn": "1Password에 로그인되지 않음",
   "provider.onepassword.urlNotConfigured":
     "1Password Connect URL이 구성되지 않음",
