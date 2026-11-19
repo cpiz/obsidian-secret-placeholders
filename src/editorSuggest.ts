@@ -25,14 +25,10 @@ import type { Provider, ProviderRef } from "./providers/types";
 
 const CACHE_TTL_MS = 60_000;
 
-function searchProviderRefs(
-  refs: ProviderRef[],
-  query: string,
-  includePinyin: boolean,
-): ProviderRef[] {
+function searchProviderRefs(refs: ProviderRef[], query: string): ProviderRef[] {
   if (!query) return refs;
   const filter = query.toLowerCase();
-  const matchesPinyin = includePinyin ? preparePinyinSearch(query) : null;
+  const matchesPinyin = preparePinyinSearch(query);
   const matches: { ref: ProviderRef; original: boolean }[] = [];
   const originalGroups = new Set<string>();
 
@@ -118,7 +114,7 @@ export class SecretEditorSuggest extends EditorSuggest<Suggestion> {
       const provider = this.providerByPrefix(prefixWithColon);
       if (!provider) return [];
       const refs = await this.getRefs(provider);
-      const matches = searchProviderRefs(refs, query.slice(colon + 1), provider.id === "vw");
+      const matches = searchProviderRefs(refs, query.slice(colon + 1));
       return matches.slice(0, 50).map((ref) => ({
         kind: "ref" as const,
         provider,

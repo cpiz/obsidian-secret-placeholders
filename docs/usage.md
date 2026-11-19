@@ -52,7 +52,7 @@ Typing `{{` in the editor triggers suggestions:
   provider's secrets at once, each result labelled with its provider.
 - `{{<prefix>:<query>` → the usual per-provider filtered list.
 
-输入 `{{vw:` 后，可用名称中的连续文字、全拼或拼音首字母搜索。原文命中优先，同名候选按创建时间从旧到新排列。
+输入 `{{vw:`、`{{1p:` 或 `{{bao:` 后，可用连续文字、全拼或拼音首字母搜索。原文命中优先，Bitwarden 的同名候选按创建时间从旧到新排列。
 合并后最多显示 50 条。选择候选时，当前输入会被完整占位符替换。
 
 ## Right-click menu
