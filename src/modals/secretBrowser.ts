@@ -2,7 +2,7 @@
 // the "Browse and insert" / "Browse and copy" commands so the user doesn't
 // have to remember exact paths.
 
-import { App, FuzzySuggestModal } from "obsidian";
+import { App, FuzzySuggestModal, type FuzzyMatch } from "obsidian";
 import { t } from "../i18n";
 import type SecretPlaceholdersPlugin from "../main";
 import type { Provider, ProviderRef } from "../providers/types";
@@ -10,6 +10,7 @@ import type { Provider, ProviderRef } from "../providers/types";
 interface Entry {
   provider: Provider;
   ref: ProviderRef;
+  order: number;
 }
 
 export class SecretBrowserModal extends FuzzySuggestModal<Entry> {
@@ -34,7 +35,7 @@ export class SecretBrowserModal extends FuzzySuggestModal<Entry> {
     for (const provider of this.plugin.registry.all()) {
       try {
         const refs = await provider.list();
-        for (const ref of refs) out.push({ provider, ref });
+        for (const ref of refs) out.push({ provider, ref, order: out.length });
       } catch {
         /* skip providers that fail to list */
       }
@@ -49,8 +50,32 @@ export class SecretBrowserModal extends FuzzySuggestModal<Entry> {
     return this.entries;
   }
 
+  getSuggestions(query: string): FuzzyMatch<Entry>[] {
+    const matches = super.getSuggestions(query);
+    const groups = new Map<string, FuzzyMatch<Entry>[]>();
+    for (const match of matches) {
+      const { provider, ref } = match.item;
+      if (ref.suggestionGroup === undefined) continue;
+      const key = `${provider.id}:${ref.suggestionGroup}`;
+      const group = groups.get(key) ?? [];
+      group.push(match);
+      groups.set(key, group);
+    }
+    for (const group of groups.values()) {
+      group.sort((a, b) => b.item.order - a.item.order);
+    }
+    // Keep fuzzy relevance between different names and restore the
+    // provider's order within each group of same-name matches.
+    return matches.map((match) => {
+      const { provider, ref } = match.item;
+      if (ref.suggestionGroup === undefined) return match;
+      return groups.get(`${provider.id}:${ref.suggestionGroup}`)?.pop() ?? match;
+    });
+  }
+
   getItemText(item: Entry): string {
-    return `${item.ref.raw.slice(2, -2)}  (${item.provider.displayName})`;
+    const label = item.ref.suggestionLabel ?? item.ref.raw.slice(2, -2);
+    return `${label}  (${item.provider.displayName})`;
   }
 
   onChooseItem(item: Entry): void {

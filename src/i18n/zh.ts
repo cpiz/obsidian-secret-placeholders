@@ -226,6 +226,7 @@ export const zh: Messages = {
     "回调缺少 state/code 查询参数",
   "provider.openbao.oidc.timeout": "OIDC 回调在 {sec} 秒后超时",
   "provider.bitwarden.serverUrlNotSet": "未设置 Bitwarden 服务器 URL",
+  "provider.bitwarden.ambiguousItem": "找到多个匹配「{item}」的 Bitwarden 项目。请重新选择项目并插入 ID 占位符。",
   "provider.bitwarden.deviceVerifCancelled": "设备验证已取消",
   "provider.bitwarden.twoFactorCancelled": "两步验证已取消",
   "provider.bitwarden.loginRetriesExhausted": "登录重试次数已用尽",

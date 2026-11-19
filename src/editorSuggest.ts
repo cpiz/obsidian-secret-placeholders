@@ -85,13 +85,16 @@ export class SecretEditorSuggest extends EditorSuggest<Suggestion> {
       const refs = await this.getRefs(provider);
       const filter = query.slice(colon + 1).toLowerCase();
       const matches = filter
-        ? refs.filter((r) => r.raw.toLowerCase().includes(filter))
+        ? refs.filter((r) =>
+          (r.suggestionLabel ?? r.raw).toLowerCase().includes(filter) ||
+          r.raw.toLowerCase().includes(filter),
+        )
         : refs;
       return matches.slice(0, 50).map((ref) => ({
         kind: "ref" as const,
         provider,
         ref,
-        label: ref.raw.slice(2, -2),
+        label: ref.suggestionLabel ?? ref.raw.slice(2, -2),
       }));
     }
 
@@ -125,7 +128,7 @@ export class SecretEditorSuggest extends EditorSuggest<Suggestion> {
           continue;
         }
         for (const ref of refs) {
-          const label = ref.raw.slice(2, -2);
+          const label = ref.suggestionLabel ?? ref.raw.slice(2, -2);
           if (!label.toLowerCase().includes(filter)) continue;
           // De-duplicate refs that share the same raw text across providers
           // (unlikely but defensive).

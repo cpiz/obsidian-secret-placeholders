@@ -130,6 +130,7 @@ depends on the provider.
 | OpenBao | `{{bao:<mount>/<path>#<key>}}` | `{{bao:kv/obsidian/github#token}}` |
 | 1Password | `{{1p:<vault>/<item>#<field>}}` | `{{1p:Personal/GitHub#password}}` |
 | Bitwarden | `{{vw:[<folder>/]<item>#<field>}}` | `{{vw:Work/CI#password}}` or `{{vw:GitHub#password}}` |
+| Bitwarden | `{{vw://<uuid>#<field>}}` | `{{vw://550e8400-e29b-41d4-a716-446655440000#password}}` |
 
 Notes:
 
@@ -142,3 +143,10 @@ Notes:
 - A `/` inside an item title breaks the syntax (the first `/` is the
   folder separator). Rename the item, or reference it by its provider
   UUID instead of its name.
+
+### Bitwarden 同名项目
+
+名称匹配忽略大小写。名称占位符指定目录时，在该目录内匹配；省略目录时，跨目录匹配。
+浏览和自动补全按创建时间从旧到新显示同名项目。创建时间缺失的项目排在最后。
+如果同名项目可以用目录区分，插入时保留名称格式。发生冲突时，选择其中任意项目都会插入 ID 占位符。
+旧的名称占位符有多个匹配时会提示重新选择。

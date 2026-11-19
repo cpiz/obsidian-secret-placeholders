@@ -13,6 +13,10 @@ export interface ProviderRef {
   raw: string;
   /** Provider-specific fields, e.g. {mount, path, key} for OpenBao. */
   parts: Record<string, string>;
+  /** Searchable candidate label when the raw reference does not contain the title. */
+  suggestionLabel?: string;
+  /** Candidates in the same group keep the provider's listing order. */
+  suggestionGroup?: string;
 }
 
 export interface ProviderAuthStatus {

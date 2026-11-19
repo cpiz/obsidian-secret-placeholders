@@ -229,6 +229,7 @@ export const en = {
     "callback missing state/code query params",
   "provider.openbao.oidc.timeout": "OIDC callback timed out after {sec}s",
   "provider.bitwarden.serverUrlNotSet": "Bitwarden server URL is not set",
+  "provider.bitwarden.ambiguousItem": "Multiple Bitwarden items match \"{item}\". Select the item again to insert an ID reference.",
   "provider.bitwarden.deviceVerifCancelled": "Device verification cancelled",
   "provider.bitwarden.twoFactorCancelled": "Two-factor verification cancelled",
   "provider.bitwarden.loginRetriesExhausted": "login retries exhausted",

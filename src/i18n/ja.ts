@@ -226,6 +226,7 @@ export const ja: Messages = {
     "コールバックに state/code クエリパラメーターがありません",
   "provider.openbao.oidc.timeout": "OIDC コールバックが {sec} 秒後にタイムアウトしました",
   "provider.bitwarden.serverUrlNotSet": "Bitwarden サーバー URL が設定されていません",
+  "provider.bitwarden.ambiguousItem": "「{item}」に一致する Bitwarden 項目が複数あります。項目を選び直して ID 参照を挿入してください。",
   "provider.bitwarden.deviceVerifCancelled": "デバイスの確認がキャンセルされました",
   "provider.bitwarden.twoFactorCancelled": "二要素認証がキャンセルされました",
   "provider.bitwarden.loginRetriesExhausted": "ログインの再試行回数を使い切りました",

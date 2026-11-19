@@ -228,6 +228,7 @@ export const it: Messages = {
   "provider.openbao.oidc.timeout": "callback OIDC scaduto dopo {sec}s",
   "provider.bitwarden.serverUrlNotSet":
     "L'URL del server Bitwarden non è impostato",
+  "provider.bitwarden.ambiguousItem": "Più elementi Bitwarden corrispondono a «{item}». Seleziona di nuovo l’elemento per inserire un riferimento tramite ID.",
   "provider.bitwarden.deviceVerifCancelled":
     "Verifica del dispositivo annullata",
   "provider.bitwarden.twoFactorCancelled":

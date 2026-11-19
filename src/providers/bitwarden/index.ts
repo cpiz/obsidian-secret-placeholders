@@ -1,7 +1,7 @@
 // Bitwarden / Vaultwarden / Bitwarden cloud provider.
 //
-// Placeholder syntax: {{vw:[<folder>/]<item>#<field>}}
-//   - <folder> is optional.  If present, must match a folder name exactly.
+// Placeholder syntax: {{vw:[<folder>/]<item>#<field>}} or {{vw://<uuid>#<field>}}
+//   - <folder> is optional. If omitted, match by title across folders.
 //   - <item> is the cipher (item) title.
 //   - <field> is one of:
 //       - "password" (default) -> Login.Password
@@ -61,7 +61,7 @@ import {
 // empty group when the placeholder has no `/`.  This keeps simple
 // references like {{vw:GitHub#password}} readable.
 const PLACEHOLDER_RE =
-  /\{\{vw:(?:([^/#{}]+)\/)?([^/#{}]+)#([^{}]+)\}\}/g;
+  /\{\{vw:(?:\/\/([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})|(?:([^/#{}]+)\/)?([^/#{}]+))#([^{}]+)\}\}/g;
 
 export interface BitwardenSettings {
   baseUrl: string;
@@ -93,6 +93,8 @@ const DEFAULTS: BitwardenSettings = {
 interface DecryptedCipher {
   id: string;
   name: string;
+  type: number;
+  createdAt: number;
   folderId: string | null;
   folderName: string | null;
   /** Null for a personal cipher; the org id for an organization cipher.
@@ -431,24 +433,28 @@ export class BitwardenProvider implements Provider {
     return {
       provider: this.id,
       raw: m[0],
-      parts: { folder: m[1] ?? "", item: m[2], field: m[3] },
+      parts: m[1]
+        ? { id: m[1], field: m[4] }
+        : { folder: m[2] ?? "", item: m[3], field: m[4] },
     };
   }
 
   formatRef(parts: Record<string, string>): string {
-    const { folder, item, field } = parts;
+    const { id, folder, item, field } = parts;
+    if (id) return `{{vw://${id}#${field}}}`;
     if (folder) return `{{vw:${folder}/${item}#${field}}}`;
     return `{{vw:${item}#${field}}}`;
   }
 
   async readKey(ref: ProviderRef): Promise<string> {
     const ciphers = await this.getCiphers();
-    const match = findCipher(ciphers, ref.parts.folder, ref.parts.item);
+    const match = findCipher(ciphers, ref.parts);
     if (!match) {
+      const item = ref.parts.id ?? ref.parts.item;
       throw new BitwardenApiError(
         404,
-        `item '${ref.parts.item}' not found`,
-        `item '${ref.parts.item}' not found in Bitwarden`,
+        `item '${item}' not found`,
+        `item '${item}' not found in Bitwarden`,
       );
     }
     const field = (ref.parts.field ?? "").toLowerCase();
@@ -478,8 +484,13 @@ export class BitwardenProvider implements Provider {
     const fieldLabel = ref.parts.field ?? "";
     const field = fieldLabel.toLowerCase();
     const ciphers = await this.getCiphers();
-    const existing = findCipher(ciphers, ref.parts.folder, ref.parts.item);
-    const folderId = await this.resolveFolderId(ref.parts.folder);
+    const existing = findCipher(ciphers, ref.parts);
+    if (ref.parts.id && !existing) {
+      throw new BitwardenApiError(404, `item '${ref.parts.id}' not found`);
+    }
+    if (ref.parts.id && existing?.type !== 1) {
+      throw new BitwardenApiError(400, "only login items can be updated by ID");
+    }
 
     if (existing) {
       // Patch: start from the existing EncStrings so sibling fields don't
@@ -491,7 +502,7 @@ export class BitwardenProvider implements Provider {
       const payload: LoginCipherPayload = {
         nameEnc: existing.raw.nameEnc,
         keyEnc: existing.cipherKeyEnc,
-        folderIdOrNull: folderId ?? existing.folderId,
+        folderIdOrNull: existing.folderId,
         organizationIdOrNull: existing.orgId,
         usernameEnc: existing.raw.usernameEnc,
         passwordEnc: existing.raw.passwordEnc,
@@ -516,7 +527,7 @@ export class BitwardenProvider implements Provider {
       const nameEnc = await encryptString(this.userKey, ref.parts.item);
       const payload: LoginCipherPayload = {
         nameEnc,
-        folderIdOrNull: folderId,
+        folderIdOrNull: await this.resolveFolderId(ref.parts.folder),
         organizationIdOrNull: null,
         usernameEnc: null,
         passwordEnc: null,
@@ -593,19 +604,43 @@ export class BitwardenProvider implements Provider {
     } catch {
       return [];
     }
-    return ciphers.map((c) => ({
-      provider: this.id,
-      raw: this.formatRef({
-        folder: c.folderName ?? "",
-        item: c.name,
-        field: "password",
-      }),
-      parts: {
-        folder: c.folderName ?? "",
-        item: c.name,
-        field: "password",
-      },
-    }));
+    const byName = new Map<string, DecryptedCipher[]>();
+    for (const cipher of ciphers) {
+      const name = cipher.name.toLowerCase();
+      const group = byName.get(name) ?? [];
+      group.push(cipher);
+      byName.set(name, group);
+    }
+
+    const refs: ProviderRef[] = [];
+    for (const [name, group] of byName) {
+      group.sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+      for (const cipher of group) {
+        const namedParts = {
+          folder: cipher.folderName ?? "",
+          item: cipher.name,
+          field: "password",
+        };
+        const conflicts = group.some((other) => other !== cipher && (
+          !other.folderName || matchesCipherName(other, namedParts)
+        ));
+        const parts = conflicts ? { id: cipher.id, field: namedParts.field } : namedParts;
+        const ref: ProviderRef = { provider: this.id, raw: this.formatRef(parts), parts };
+        if (group.length > 1) {
+          const date = Number.isFinite(cipher.createdAt)
+            ? new Date(cipher.createdAt).toLocaleString()
+            : "";
+          ref.suggestionLabel = [
+            this.formatRef(namedParts).slice(2, -2),
+            date,
+            cipher.id.slice(-8),
+          ].filter(Boolean).join(" · ");
+          ref.suggestionGroup = name;
+        }
+        refs.push(ref);
+      }
+    }
+    return refs;
   }
 
   clearCache(): void {
@@ -794,9 +829,12 @@ export class BitwardenProvider implements Provider {
           type: f.Type ?? 1,
         });
       }
+      const createdAt = Date.parse(c.CreationDate ?? "");
       out.push({
         id: c.Id,
         name,
+        type: c.Type,
+        createdAt: Number.isFinite(createdAt) ? createdAt : Number.POSITIVE_INFINITY,
         folderId: c.FolderId,
         folderName: c.FolderId ? folderById.get(c.FolderId) ?? null : null,
         orgId: c.OrganizationId,
@@ -832,27 +870,26 @@ export class BitwardenProvider implements Provider {
   }
 }
 
+function matchesCipherName(cipher: DecryptedCipher, parts: Record<string, string>): boolean {
+  return cipher.name.toLowerCase() === parts.item.toLowerCase() && (
+    !parts.folder || cipher.folderName?.toLowerCase() === parts.folder.toLowerCase()
+  );
+}
+
 function findCipher(
   ciphers: DecryptedCipher[],
-  folder: string,
-  item: string,
-): DecryptedCipher | null {
-  const itemLc = item.toLowerCase();
-  const folderLc = folder.toLowerCase();
-  // Exact match (folder + item) first; fall back to item-only if folder
-  // wasn't specified.
-  for (const c of ciphers) {
-    if (c.name.toLowerCase() !== itemLc) continue;
-    const cFolder = (c.folderName ?? "").toLowerCase();
-    if (folder) {
-      if (cFolder === folderLc) return c;
-    } else {
-      // No folder in the placeholder => prefer root-level match, but
-      // accept a single uniquely-named match in any folder.
-      return c;
-    }
+  parts: Record<string, string>,
+): DecryptedCipher | undefined {
+  if (parts.id) {
+    const id = parts.id.toLowerCase();
+    return ciphers.find((cipher) => cipher.id.toLowerCase() === id);
   }
-  return null;
+  const matches = ciphers.filter((cipher) => matchesCipherName(cipher, parts));
+  if (matches.length > 1) {
+    const message = t("provider.bitwarden.ambiguousItem", { item: parts.item });
+    throw new BitwardenApiError(409, message, message);
+  }
+  return matches[0];
 }
 
 async function safeDecrypt(
