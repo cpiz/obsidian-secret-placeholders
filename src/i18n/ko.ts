@@ -158,6 +158,24 @@ export const ko: Messages = {
     "로그인 시 사용자 키 + 리프레시 토큰을 암호구로 암호화하여 디스크에 저장합니다. 다음 Obsidian 시작 시 마스터 비밀번호 대신 암호구를 입력하라는 메시지가 표시됩니다. 기본값은 꺼짐입니다.",
 
   // 제공자 — Bitwarden 로그인 모달
+  "provider.bitwarden.deviceLogin":
+    "기기로 로그인",
+  "provider.bitwarden.deviceLoginSending":
+    "승인 요청을 보내는 중…",
+  "provider.bitwarden.deviceLoginFingerprint":
+    "다른 기기에 표시된 지문 문구가 일치할 때만 승인하세요.",
+  "provider.bitwarden.deviceLoginWaiting":
+    "로그인된 Bitwarden 앱에서 승인을 기다리는 중…",
+  "provider.bitwarden.deviceLoginRequestFailed":
+    "기기 승인을 시작할 수 없습니다. 새로 설치했거나 등록이 해제됐다면 마스터 비밀번호로 한 번 로그인하세요.",
+  "provider.bitwarden.deviceLoginEnded":
+    "기기 요청을 사용할 수 없습니다. 거부되었거나 만료되었을 수 있습니다. 다시 시도하세요.",
+  "provider.bitwarden.deviceLoginTimeout":
+    "기기 승인 대기 시간이 초과되었습니다. 다시 시도하세요.",
+  "provider.bitwarden.deviceLoginKeyFailed":
+    "승인된 요청으로 보관함을 잠금 해제하지 못했습니다. 다시 시도하거나 마스터 비밀번호를 사용하세요.",
+  "provider.bitwarden.deviceLoginTokenFailed":
+    "Vaultwarden이 승인된 로그인을 완료하지 못했습니다. 다시 시도하거나 마스터 비밀번호를 사용하세요.",
   "provider.bitwarden.loginTitle": "Bitwarden / Vaultwarden에 로그인",
   "provider.bitwarden.loginServer": "서버: {server}",
   "provider.bitwarden.loginServerUnset": "(먼저 설정에서 서버 URL을 지정하세요)",

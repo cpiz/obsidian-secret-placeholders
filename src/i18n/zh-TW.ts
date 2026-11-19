@@ -158,6 +158,24 @@ export const zhTW: Messages = {
     "登入時，用通關密語加密使用者金鑰 + 重新整理權杖並儲存到磁碟。下次啟動 Obsidian 時將提示輸入通關密語而非主密碼。預設關閉。",
 
   // 提供方 — Bitwarden 登入模態視窗
+  "provider.bitwarden.deviceLogin":
+    "使用裝置登入",
+  "provider.bitwarden.deviceLoginSending":
+    "正在傳送登入核准請求…",
+  "provider.bitwarden.deviceLoginFingerprint":
+    "請核對另一部裝置顯示的指紋短語，只有一致時才核准。",
+  "provider.bitwarden.deviceLoginWaiting":
+    "等待已登入的 Bitwarden 用戶端核准…",
+  "provider.bitwarden.deviceLoginRequestFailed":
+    "無法發起裝置核准。如果是新安裝或已失去裝置登記，請先用主密碼登入一次。",
+  "provider.bitwarden.deviceLoginEnded":
+    "裝置請求已無法使用，可能遭拒絕或已過期。請重試。",
+  "provider.bitwarden.deviceLoginTimeout":
+    "等待裝置核准逾時，請重試。",
+  "provider.bitwarden.deviceLoginKeyFailed":
+    "已核准的請求無法解鎖密碼庫。請重試或以主密碼登入。",
+  "provider.bitwarden.deviceLoginTokenFailed":
+    "Vaultwarden 無法完成核准後的登入。請重試或以主密碼登入。",
   "provider.bitwarden.loginTitle": "登入 Bitwarden / Vaultwarden",
   "provider.bitwarden.loginServer": "伺服器：{server}",
   "provider.bitwarden.loginServerUnset": "（請先在設定中填寫伺服器 URL）",

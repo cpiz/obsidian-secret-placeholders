@@ -159,6 +159,24 @@ export const it: Messages = {
     "All'accesso, cifra la user key + il refresh token con una passphrase e li salva su disco. Al prossimo avvio di Obsidian ti verrà chiesta la passphrase invece della master password. Disattivato per impostazione predefinita.",
 
   // Provider — modale di accesso Bitwarden
+  "provider.bitwarden.deviceLogin":
+    "Accedi con un dispositivo",
+  "provider.bitwarden.deviceLoginSending":
+    "Invio della richiesta di approvazione…",
+  "provider.bitwarden.deviceLoginFingerprint":
+    "Approva solo se questa frase di impronta corrisponde a quella mostrata sull’altro dispositivo.",
+  "provider.bitwarden.deviceLoginWaiting":
+    "In attesa dell’approvazione nell’app Bitwarden in cui hai effettuato l’accesso…",
+  "provider.bitwarden.deviceLoginRequestFailed":
+    "Impossibile avviare l’approvazione. Se il dispositivo è nuovo o non è riconosciuto, accedi una volta con la password principale.",
+  "provider.bitwarden.deviceLoginEnded":
+    "La richiesta non è più disponibile. Potrebbe essere stata rifiutata o essere scaduta. Riprova.",
+  "provider.bitwarden.deviceLoginTimeout":
+    "Tempo scaduto in attesa dell’approvazione. Riprova.",
+  "provider.bitwarden.deviceLoginKeyFailed":
+    "La richiesta approvata non ha sbloccato la cassaforte. Riprova o usa la password principale.",
+  "provider.bitwarden.deviceLoginTokenFailed":
+    "Vaultwarden non ha completato l’accesso approvato. Riprova o usa la password principale.",
   "provider.bitwarden.loginTitle": "Accedi a Bitwarden / Vaultwarden",
   "provider.bitwarden.loginServer": "Server: {server}",
   "provider.bitwarden.loginServerUnset": "(imposta prima l'URL del server nelle impostazioni)",

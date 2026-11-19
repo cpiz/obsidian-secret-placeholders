@@ -158,6 +158,24 @@ export const zh: Messages = {
     "登录时，用口令加密用户密钥 + 刷新令牌并存储到磁盘。下次启动 Obsidian 时将提示输入口令而非主密码。默认关闭。",
 
   // 提供方 — Bitwarden 登录模态框
+  "provider.bitwarden.deviceLogin":
+    "使用设备登录",
+  "provider.bitwarden.deviceLoginSending":
+    "正在发送登录批准请求…",
+  "provider.bitwarden.deviceLoginFingerprint":
+    "请先核对另一台设备上显示的指纹短语，只有一致时才批准。",
+  "provider.bitwarden.deviceLoginWaiting":
+    "等待已登录的 Bitwarden 客户端批准…",
+  "provider.bitwarden.deviceLoginRequestFailed":
+    "无法发起设备批准。如果这是新安装或设备已失去登记，请先用主密码登录一次。",
+  "provider.bitwarden.deviceLoginEnded":
+    "设备请求已不可用，可能已被拒绝或过期。请重试。",
+  "provider.bitwarden.deviceLoginTimeout":
+    "等待设备批准超时，请重试。",
+  "provider.bitwarden.deviceLoginKeyFailed":
+    "已批准的请求无法解锁密码库。请重试或使用主密码登录。",
+  "provider.bitwarden.deviceLoginTokenFailed":
+    "Vaultwarden 未能完成批准后的登录。请重试或使用主密码登录。",
   "provider.bitwarden.loginTitle": "登录到 Bitwarden / Vaultwarden",
   "provider.bitwarden.loginServer": "服务器：{server}",
   "provider.bitwarden.loginServerUnset": "（请先在设置中填写服务器 URL）",

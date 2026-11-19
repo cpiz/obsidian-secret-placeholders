@@ -6,10 +6,9 @@ import { App, ButtonComponent, Modal, Setting } from "obsidian";
 
 import { t } from "../../i18n";
 
-export interface BitwardenCredentials {
-  email: string;
-  masterPassword: string;
-}
+type BitwardenCredentials =
+  | { method: "password"; email: string; masterPassword: string }
+  | { method: "device"; email: string };
 
 export class BitwardenLoginModal extends Modal {
   private email = "";
@@ -21,6 +20,7 @@ export class BitwardenLoginModal extends Modal {
     app: App,
     private defaultEmail: string,
     private serverUrl: string,
+    private deviceLoginAvailable: boolean,
     private onSubmit: (creds: BitwardenCredentials | null) => void | Promise<void>,
   ) {
     super(app);
@@ -64,27 +64,27 @@ export class BitwardenLoginModal extends Modal {
       });
     });
 
-    new Setting(contentEl)
+    const buttons = new Setting(contentEl)
       .addButton((b) => {
         b.setButtonText(t("button.logIn")).setCta().onClick(() => this.submit());
         this.submitBtn = b;
-      })
-      .addButton((b) =>
-        b.setButtonText(t("button.cancel")).onClick(() => {
-          if (this.busy) return;
-          void this.onSubmit(null);
-          this.close();
-        }),
-      );
+      });
+    if (this.deviceLoginAvailable) {
+      buttons.addButton((b) => b.setButtonText(t("provider.bitwarden.deviceLogin"))
+        .onClick(() => this.submit("device")));
+    }
+    buttons.addButton((b) => b.setButtonText(t("button.cancel")).onClick(() => this.close()));
   }
 
-  private submit(): void {
+  private submit(method: BitwardenCredentials["method"] = "password"): void {
     if (this.busy) return;
-    if (!this.email || !this.masterPassword) return;
+    if (!this.email || (method === "password" && !this.masterPassword)) return;
     this.busy = true;
     this.submitBtn?.setButtonText(t("provider.bitwarden.loggingIn")).setDisabled(true);
 
-    const creds = { email: this.email, masterPassword: this.masterPassword };
+    const creds: BitwardenCredentials = method === "device"
+      ? { method, email: this.email }
+      : { method, email: this.email, masterPassword: this.masterPassword };
     // Clear before handing off so the field doesn't linger in any DOM cache.
     this.masterPassword = "";
 
@@ -96,7 +96,50 @@ export class BitwardenLoginModal extends Modal {
   }
 
   onClose(): void {
+    this.masterPassword = "";
     this.contentEl.empty();
+    if (!this.busy) void this.onSubmit(null);
+  }
+}
+
+export class DeviceApprovalModal extends Modal {
+  private statusEl: HTMLElement | null = null;
+  private finished = false;
+
+  constructor(
+    app: App,
+    private fingerprint: string,
+    private onCancel: () => void,
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    this.contentEl.createEl("h3", { text: t("provider.bitwarden.deviceLogin") });
+    this.statusEl = this.contentEl.createEl("p", { text: t("provider.bitwarden.deviceLoginSending") });
+    this.contentEl.createEl("p", { text: t("provider.bitwarden.deviceLoginFingerprint") });
+    this.contentEl.createEl("p").createEl("strong", { text: this.fingerprint });
+    new Setting(this.contentEl)
+      .addButton((b) => b.setButtonText(t("button.cancel")).onClick(() => this.close()));
+  }
+
+  waiting(): void {
+    this.statusEl?.setText(t("provider.bitwarden.deviceLoginWaiting"));
+  }
+
+  finish(): void {
+    if (this.finished) return;
+    this.finished = true;
+    this.close();
+  }
+
+  onClose(): void {
+    this.statusEl = null;
+    this.contentEl.empty();
+    if (!this.finished) {
+      this.finished = true;
+      this.onCancel();
+    }
   }
 }
 
@@ -145,7 +188,6 @@ export class TwoFactorOtpModal extends Modal {
       .addButton((b) =>
         b.setButtonText(t("button.cancel")).onClick(() => {
           if (this.busy) return;
-          void this.onSubmit(null);
           this.close();
         }),
       );
@@ -164,6 +206,7 @@ export class TwoFactorOtpModal extends Modal {
 
   onClose(): void {
     this.contentEl.empty();
+    if (!this.busy) this.onSubmit(null);
   }
 }
 
@@ -213,7 +256,6 @@ export class NewDeviceOtpModal extends Modal {
       .addButton((b) =>
         b.setButtonText(t("button.cancel")).onClick(() => {
           if (this.busy) return;
-          void this.onSubmit(null);
           this.close();
         }),
       );
@@ -232,5 +274,6 @@ export class NewDeviceOtpModal extends Modal {
 
   onClose(): void {
     this.contentEl.empty();
+    if (!this.busy) this.onSubmit(null);
   }
 }

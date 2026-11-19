@@ -161,6 +161,24 @@ export const en = {
     "On login, encrypt the user key + refresh token with a passphrase and store them on disk. On the next Obsidian start you'll be prompted for the passphrase instead of the master password. Off by default.",
 
   // Provider — Bitwarden login modal
+  "provider.bitwarden.deviceLogin":
+    "Log in with a device",
+  "provider.bitwarden.deviceLoginSending":
+    "Sending an approval request…",
+  "provider.bitwarden.deviceLoginFingerprint":
+    "Approve only if this fingerprint phrase matches the one on your other device.",
+  "provider.bitwarden.deviceLoginWaiting":
+    "Waiting for approval in your signed-in Bitwarden app…",
+  "provider.bitwarden.deviceLoginRequestFailed":
+    "Could not start device approval. If this installation is new or no longer recognized, log in once with your master password.",
+  "provider.bitwarden.deviceLoginEnded":
+    "The device request is no longer available. It may have been denied or expired. Try again.",
+  "provider.bitwarden.deviceLoginTimeout":
+    "Device approval timed out. Try again.",
+  "provider.bitwarden.deviceLoginKeyFailed":
+    "The approved request could not unlock the vault. Try again or use your master password.",
+  "provider.bitwarden.deviceLoginTokenFailed":
+    "Vaultwarden could not complete the approved login. Try again or use your master password.",
   "provider.bitwarden.loginTitle": "Log in to Bitwarden / Vaultwarden",
   "provider.bitwarden.loginServer": "Server: {server}",
   "provider.bitwarden.loginServerUnset": "(set the server URL in settings first)",

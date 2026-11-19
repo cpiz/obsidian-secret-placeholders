@@ -15,6 +15,7 @@ export class ProviderRegistry {
   }
 
   unregister(id: string): void {
+    this.providers.get(id)?.dispose?.();
     this.providers.delete(id);
   }
 

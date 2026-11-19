@@ -20,6 +20,8 @@
 // regular Bitwarden client by changing their master password (which forces
 // re-protection with the current format).
 
+import { fingerprintWords } from "./fingerprintWords";
+
 export class BitwardenCryptoError extends Error {}
 
 // --- byte helpers --------------------------------------------------------
@@ -332,7 +334,10 @@ export async function unlockUserKey(
   stretchedMasterKey: SymmetricKey,
   protectedKey: string,
 ): Promise<SymmetricKey> {
-  const raw = await decryptBytes(stretchedMasterKey, protectedKey);
+  return unpackUserKey(await decryptBytes(stretchedMasterKey, protectedKey));
+}
+
+export function unpackUserKey(raw: Uint8Array): SymmetricKey {
   if (raw.length !== 64) {
     throw new BitwardenCryptoError(
       `unexpected user-key length ${raw.length} (expected 64)`,
@@ -365,7 +370,10 @@ export async function unlockPrivateKey(
   userKey: SymmetricKey,
   privateKeyEncString: string,
 ): Promise<RsaPrivateKey> {
-  const pkcs8 = await decryptBytes(userKey, privateKeyEncString);
+  return importRsaPrivateKey(await decryptBytes(userKey, privateKeyEncString));
+}
+
+async function importRsaPrivateKey(pkcs8: Uint8Array): Promise<RsaPrivateKey> {
   const importFor = (hash: "SHA-1" | "SHA-256") =>
     crypto.subtle.importKey(
       "pkcs8",
@@ -375,6 +383,57 @@ export async function unlockPrivateKey(
       ["decrypt"],
     );
   return { sha1: await importFor("SHA-1"), sha256: await importFor("SHA-256") };
+}
+
+export async function deviceLoginFingerprint(email: string, publicKey: Uint8Array): Promise<string> {
+  const publicKeyHash = new Uint8Array(await crypto.subtle.digest("SHA-256", publicKey));
+  const digest = await hkdfExpand(publicKeyHash, email.toLowerCase(), 32);
+  let value = 0n;
+  for (const byte of digest) value = (value << 8n) | BigInt(byte);
+  const radix = BigInt(fingerprintWords.length);
+  return Array.from({ length: 5 }, () => {
+    const word = fingerprintWords[Number(value % radix)];
+    value /= radix;
+    return word;
+  }).join("-");
+}
+
+export async function createDeviceLoginKeys(email: string): Promise<{
+  accessCode: string;
+  publicKey: string;
+  fingerprint: string;
+  decryptApprovalKey: (encryptedKey: string) => Promise<Uint8Array>;
+}> {
+  const pair = await crypto.subtle.generateKey(
+    {
+      name: "RSA-OAEP",
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: "SHA-1",
+    },
+    true,
+    ["encrypt", "decrypt"],
+  );
+  const publicKey = new Uint8Array(await crypto.subtle.exportKey("spki", pair.publicKey));
+  const privateBytes = new Uint8Array(await crypto.subtle.exportKey("pkcs8", pair.privateKey));
+  let privateKey: RsaPrivateKey;
+  try {
+    privateKey = await importRsaPrivateKey(privateBytes);
+  } finally {
+    privateBytes.fill(0);
+  }
+
+  return {
+    publicKey: b64encode(publicKey),
+    accessCode: b64encode(crypto.getRandomValues(new Uint8Array(24))).replace(/\+/g, "-").replace(/\//g, "_"),
+    fingerprint: await deviceLoginFingerprint(email, publicKey),
+    decryptApprovalKey: async (encryptedKey) => {
+      const match = /^([34])\.([A-Za-z0-9+/]+={0,2})$/.exec(encryptedKey);
+      if (!match) throw new BitwardenCryptoError("unsupported device approval key format");
+      const key = match[1] === "3" ? privateKey.sha256 : privateKey.sha1;
+      return new Uint8Array(await crypto.subtle.decrypt({ name: "RSA-OAEP" }, key, b64decode(match[2])));
+    },
+  };
 }
 
 /** Decrypt an organization's 64-byte symmetric key from its RSA EncString.

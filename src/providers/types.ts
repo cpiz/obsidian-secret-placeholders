@@ -95,6 +95,7 @@ export interface Provider {
   list(prefix?: string): Promise<ProviderRef[]>;
 
   clearCache(): void;
+  dispose?(): void;
 
   auth: ProviderAuth;
 

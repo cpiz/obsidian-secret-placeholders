@@ -30,9 +30,15 @@ export interface LoginResponse {
   expires_in: number;
   token_type: string;
   /** Protected user encryption key in EncString form. */
-  key: string;
+  key?: string;
   /** Protected RSA private key (not used yet - reserved for org keys). */
   privateKey?: string;
+}
+
+export interface DeviceApproval {
+  approved: boolean | null;
+  encryptedKey?: string;
+  encryptedMasterPasswordHash?: string;
 }
 
 /** Bitwarden's official server returns JSON with PascalCase keys, while
@@ -127,6 +133,7 @@ interface ClientOptions {
 // Vaultwarden 1.32+) require.  Treat any rejection as fatal so we don't
 // leak a partial login attempt to the server.
 const CLIENT_NAME = "web";
+const DEVICE_TYPE = "8"; // Keep the existing login device type for device approvals.
 
 export class BitwardenClient {
   private accessToken: string | null = null;
@@ -134,6 +141,15 @@ export class BitwardenClient {
   private refreshToken: string | null = null;
 
   constructor(private opts: ClientOptions) {}
+
+  canUseDeviceLogin(): boolean {
+    try {
+      const url = new URL(this.opts.baseUrl);
+      return url.protocol === "https:" && !/(^|\.)bitwarden\.(com|eu)$/i.test(url.hostname);
+    } catch {
+      return false;
+    }
+  }
 
   setTokens(
     accessToken: string,
@@ -207,8 +223,7 @@ export class BitwardenClient {
     return { kdf, kdfIterations, kdfMemory, kdfParallelism };
   }
 
-  /** Password grant.  `passwordHashB64` is the base64-encoded master
-   *  password hash (PBKDF2(master_key, master_password, 1)).
+  /** Password grant with a master password hash or approved device request code.
    *
    *  - `newDeviceOtp`: the email-delivered code Bitwarden cloud asks for
    *    on previously-unseen devices.
@@ -217,9 +232,10 @@ export class BitwardenClient {
    *    rejected upstream. */
   async login(
     email: string,
-    passwordHashB64: string,
+    credential: string,
     deviceName: string,
     extras: {
+      authRequestId?: string;
       newDeviceOtp?: string;
       twoFactor?: { token: string; provider: string; remember?: boolean };
     } = {},
@@ -227,13 +243,14 @@ export class BitwardenClient {
     const body = new URLSearchParams({
       grant_type: "password",
       username: email,
-      password: passwordHashB64,
+      password: credential,
       scope: "api offline_access",
       client_id: "connector",
-      deviceType: "8", // generic web client
+      deviceType: DEVICE_TYPE,
       deviceIdentifier: this.opts.deviceIdentifier,
       deviceName,
     });
+    if (extras.authRequestId) body.set("authRequest", extras.authRequestId);
     if (extras.newDeviceOtp) body.set("newDeviceOtp", extras.newDeviceOtp);
     if (extras.twoFactor) {
       body.set("twoFactorToken", extras.twoFactor.token);
@@ -249,13 +266,67 @@ export class BitwardenClient {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         Accept: "application/json",
+        ...(extras.authRequestId ? { "Device-Type": DEVICE_TYPE } : {}),
         ...this.bitwardenHeaders(),
       },
       body: body.toString(),
       throw: false,
     });
     if (res.status >= 400) throw new BitwardenApiError(res.status, res.text);
-    return normalizeLoginResponse(res.json);
+    return normalizeLoginResponse(res.json, !extras.authRequestId);
+  }
+
+  async createDeviceApproval(email: string, publicKey: string, accessCode: string): Promise<string> {
+    if (!this.canUseDeviceLogin()) {
+      throw new BitwardenApiError(400, "Device approval requires a self-hosted HTTPS server");
+    }
+    const res = await requestUrl({
+      url: this.apiUrl("auth-requests"),
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Device-Type": DEVICE_TYPE,
+        ...this.bitwardenHeaders(),
+      },
+      body: JSON.stringify({
+        email, deviceIdentifier: this.opts.deviceIdentifier, publicKey, accessCode, type: 0,
+      }),
+      throw: false,
+    });
+    if (res.status >= 400) throw new BitwardenApiError(res.status, "Unable to request device approval");
+    const raw = (res.json ?? {}) as Record<string, unknown>;
+    const id = pick<string>(raw, "id", "Id");
+    if (typeof id !== "string" || !id) {
+      throw new BitwardenApiError(502, "Device approval response has no request ID");
+    }
+    return id;
+  }
+
+  async getDeviceApproval(id: string, accessCode: string): Promise<DeviceApproval> {
+    const query = new URLSearchParams({ code: accessCode });
+    const res = await requestUrl({
+      url: this.apiUrl(`auth-requests/${encodeURIComponent(id)}/response?${query}`),
+      method: "GET",
+      headers: {
+        "Cache-Control": "no-cache",
+        "Device-Type": DEVICE_TYPE,
+        ...this.bitwardenHeaders(),
+      },
+      throw: false,
+    });
+    if (res.status >= 400) throw new BitwardenApiError(res.status, "Unable to check device approval");
+    const raw = (res.json ?? {}) as Record<string, unknown>;
+    const approved = pick<boolean | null>(raw, "requestApproved", "RequestApproved");
+    if (approved !== true && approved !== false && approved !== null) {
+      throw new BitwardenApiError(502, "Device approval response has no valid approval state");
+    }
+    const key = pick<string>(raw, "key", "Key");
+    const passwordHash = pick<string>(raw, "masterPasswordHash", "MasterPasswordHash");
+    return {
+      approved,
+      encryptedKey: typeof key === "string" ? key : undefined,
+      encryptedMasterPasswordHash: typeof passwordHash === "string" ? passwordHash : undefined,
+    };
   }
 
   /** True if the given error is Bitwarden's "new device verification
@@ -429,7 +500,7 @@ function buildLoginCipherBody(payload: LoginCipherPayload): unknown {
   };
 }
 
-function normalizeLoginResponse(raw: unknown): LoginResponse {
+function normalizeLoginResponse(raw: unknown, requireKey = true): LoginResponse {
   const r = (raw ?? {}) as Record<string, unknown>;
   const access_token = pick<string>(r, "access_token", "accessToken");
   const refresh_token = pick<string>(r, "refresh_token", "refreshToken");
@@ -437,11 +508,11 @@ function normalizeLoginResponse(raw: unknown): LoginResponse {
   const token_type = pick<string>(r, "token_type", "tokenType");
   const key = pick<string>(r, "Key", "key");
   const privateKey = pick<string>(r, "PrivateKey", "privateKey");
-  if (typeof access_token !== "string" || typeof key !== "string") {
+  if (typeof access_token !== "string" || !access_token ||
+      (requireKey && typeof key !== "string")) {
     throw new BitwardenApiError(
       500,
-      JSON.stringify(r),
-      `login response missing access_token or Key: ${JSON.stringify(r)}`,
+      "Login response is missing an access token or required protected key",
     );
   }
   return {
@@ -449,7 +520,7 @@ function normalizeLoginResponse(raw: unknown): LoginResponse {
     refresh_token,
     expires_in: typeof expires_in === "number" ? expires_in : 3600,
     token_type: token_type ?? "Bearer",
-    key,
+    key: typeof key === "string" ? key : undefined,
     privateKey,
   };
 }

@@ -137,6 +137,7 @@ export default class SecretPlaceholdersPlugin extends Plugin {
 
   onunload(): void {
     this.registry.clearAllCaches();
+    for (const provider of this.registry.all()) provider.dispose?.();
     this.statusBar?.destroy();
     this.statusBar = null;
   }

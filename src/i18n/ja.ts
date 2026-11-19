@@ -158,6 +158,24 @@ export const ja: Messages = {
     "ログイン時に、ユーザーキー + リフレッシュトークンをパスフレーズで暗号化してディスクに保存します。次回 Obsidian 起動時には、マスターパスワードの代わりにパスフレーズの入力を求められます。既定ではオフです。",
 
   // プロバイダー — Bitwarden ログインモーダル
+  "provider.bitwarden.deviceLogin":
+    "デバイスでログイン",
+  "provider.bitwarden.deviceLoginSending":
+    "承認リクエストを送信しています…",
+  "provider.bitwarden.deviceLoginFingerprint":
+    "別のデバイスに表示されたフィンガープリントフレーズと一致する場合のみ承認してください。",
+  "provider.bitwarden.deviceLoginWaiting":
+    "ログイン済みの Bitwarden アプリでの承認を待っています…",
+  "provider.bitwarden.deviceLoginRequestFailed":
+    "デバイス承認を開始できませんでした。新しいインストール、または登録が失われた場合は、先にマスターパスワードでログインしてください。",
+  "provider.bitwarden.deviceLoginEnded":
+    "リクエストは利用できません。拒否されたか、期限が切れた可能性があります。もう一度お試しください。",
+  "provider.bitwarden.deviceLoginTimeout":
+    "デバイス承認がタイムアウトしました。もう一度お試しください。",
+  "provider.bitwarden.deviceLoginKeyFailed":
+    "承認されたリクエストで保管庫をロック解除できませんでした。再試行するか、マスターパスワードを使用してください。",
+  "provider.bitwarden.deviceLoginTokenFailed":
+    "Vaultwarden が承認済みのログインを完了できませんでした。再試行するか、マスターパスワードを使用してください。",
   "provider.bitwarden.loginTitle": "Bitwarden / Vaultwarden にログイン",
   "provider.bitwarden.loginServer": "サーバー: {server}",
   "provider.bitwarden.loginServerUnset": "（先に設定でサーバー URL を指定してください）",

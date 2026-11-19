@@ -108,6 +108,10 @@ First login from a new device may trigger two extra prompts:
 - **Two-factor (TOTP)** — if 2FA is enabled, enter the code from your
   authenticator app.
 
+**使用设备登录（自托管 Vaultwarden）**：配置 HTTPS 地址。若 Vaultwarden 尚未识别当前 Obsidian 安装，先用主密码登录一次。之后可在插件登录窗口选择「使用设备登录」。在已登录同一账号的 Bitwarden 客户端核对两边的指纹短语，一致时才批准。如果没收到推送，可在客户端的待处理登录请求里查看。服务器要求两步验证时，仍需输入 TOTP。取消或超时后可重新发起，也可继续使用主密码。
+
+指纹短语使用电子前哨基金会的 [EFF 长词表](https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt)，按 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 授权使用。词表去掉了骰子编号，保留原始词序。
+
 **Remember session:** when on, the plugin encrypts your account's
 encryption key and refresh token on disk under a passphrase you choose.
 On the next Obsidian start it asks for that passphrase instead of your

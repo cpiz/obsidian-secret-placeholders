@@ -36,26 +36,31 @@ import {
   BitwardenClient,
   BitwardenApiError,
   CustomFieldEnc,
+  LoginResponse,
   LoginCipherPayload,
   newDeviceIdentifier,
 } from "./client";
 import {
   SymmetricKey,
+  createDeviceLoginKeys,
   decryptBytes,
   decryptString,
   deriveMasterKey,
   encryptString,
   masterPasswordHash,
   stretchMasterKey,
+  unpackUserKey,
   unlockOrgKey,
   unlockPrivateKey,
   unlockUserKey,
 } from "./crypto";
 import {
   BitwardenLoginModal,
+  DeviceApprovalModal,
   NewDeviceOtpModal,
   TwoFactorOtpModal,
 } from "./loginModal";
+import { waitForDeviceApproval } from "./deviceLogin";
 
 // {{vw:[<folder>/]<item>#<field>}}
 // We allow the folder portion to be omitted - the regex captures it as an
@@ -146,6 +151,7 @@ export class BitwardenProvider implements Provider {
   private ciphers: DecryptedCipher[] | null = null;
   private cipherCacheExpires = 0;
   private syncInflight: Promise<DecryptedCipher[]> | null = null;
+  private loginAbort: AbortController | null = null;
   private listeners = new Set<() => void>();
 
   auth: ProviderAuth;
@@ -167,6 +173,7 @@ export class BitwardenProvider implements Provider {
         return this.startLoginFlow();
       },
       logout: async () => {
+        this.loginAbort?.abort();
         this.client?.clearTokens();
         this.userKey = null;
         this.orgKeys.clear();
@@ -270,6 +277,7 @@ export class BitwardenProvider implements Provider {
   private async persistSession(
     userKey: { encKey: Uint8Array; macKey: Uint8Array },
     refreshToken: string | null,
+    signal: AbortSignal,
   ): Promise<void> {
     if (!refreshToken) {
       // Without a refresh token we can't restore later, so don't bother
@@ -282,6 +290,7 @@ export class BitwardenProvider implements Provider {
     const passphrase = await this.ctx.promptPassphrase(
       t("provider.bitwarden.setUnlockPassphrase"),
     );
+    signal.throwIfAborted();
     if (!passphrase) {
       // User cancelled - turn rememberSession back off and clear any old
       // blobs so the next cold-start doesn't show a misleading prompt.
@@ -294,14 +303,15 @@ export class BitwardenProvider implements Provider {
     const packed = new Uint8Array(64);
     packed.set(userKey.encKey, 0);
     packed.set(userKey.macKey, 32);
-    this.settings.encryptedUserKey = await encryptBytesWithPassphrase(
-      packed,
-      passphrase,
-    );
-    this.settings.encryptedRefreshToken = await encryptStringWithPassphrase(
+    const encryptedUserKey = await encryptBytesWithPassphrase(packed, passphrase);
+    packed.fill(0);
+    const encryptedRefreshToken = await encryptStringWithPassphrase(
       refreshToken,
       passphrase,
     );
+    signal.throwIfAborted();
+    this.settings.encryptedUserKey = encryptedUserKey;
+    this.settings.encryptedRefreshToken = encryptedRefreshToken;
     await this.persist();
   }
 
@@ -328,38 +338,61 @@ export class BitwardenProvider implements Provider {
   }
 
   private async startLoginFlow(): Promise<void> {
+    const client = this.client;
+    if (!client || this.loginAbort) return;
+    const controller = new AbortController();
+    const { signal } = controller;
+    this.loginAbort = controller;
+    const serverUrl = this.settings.baseUrl;
+    const deviceLoginAvailable = client.canUseDeviceLogin();
+
     return new Promise<void>((resolve) => {
-      new BitwardenLoginModal(
+      const modal = new BitwardenLoginModal(
         this.ctx.app,
         this.settings.email,
-        this.settings.baseUrl,
+        serverUrl,
+        deviceLoginAvailable,
         async (creds) => {
-          if (!creds) return resolve();
+          signal.removeEventListener("abort", close);
           try {
-            await this.performLogin(creds.email, creds.masterPassword);
+            if (!creds) return;
+            signal.throwIfAborted();
+            if (this.client !== client) throw new Error(t("provider.bitwarden.deviceLoginRequestFailed"));
+            this.settings.email = creds.email;
+            await this.persist();
+            if (creds.method === "device") {
+              await this.performDeviceLogin(client, creds.email.toLowerCase(), controller);
+            } else {
+              await this.performLogin(client, creds.email, creds.masterPassword, signal);
+            }
             new Notice(t("provider.bitwarden.loggedIn"));
           } catch (e) {
-            new Notice(t("provider.bitwarden.loginFailed", { msg: (e as Error).message }));
+            if (!signal.aborted) {
+              new Notice(t("provider.bitwarden.loginFailed", { msg: (e as Error).message }));
+            }
+          } finally {
+            this.loginAbort = null;
+            if (creds && !signal.aborted) {
+              this.ctx.notifyAuthChanged(this.id);
+              this.notify();
+            }
+            resolve();
           }
-          this.ctx.notifyAuthChanged(this.id);
-          this.notify();
-          resolve();
         },
-      ).open();
+      );
+      const close = () => modal.close();
+      signal.addEventListener("abort", close, { once: true });
+      modal.open();
     });
   }
 
   private async performLogin(
+    client: BitwardenClient,
     email: string,
     masterPassword: string,
+    signal: AbortSignal,
   ): Promise<void> {
-    if (!this.client) {
-      throw new Error(t("provider.bitwarden.serverUrlNotSet"));
-    }
-    this.settings.email = email;
-    await this.persist();
-
-    const pre = await this.client.prelogin(email);
+    const pre = await client.prelogin(email);
     const masterKey = await deriveMasterKey(masterPassword, email, {
       kdf: pre.kdf,
       iterations: pre.kdfIterations,
@@ -368,16 +401,66 @@ export class BitwardenProvider implements Provider {
     });
     const passwordHash = await masterPasswordHash(masterKey, masterPassword);
     const stretched = await stretchMasterKey(masterKey);
+    const login = await this.exchangeLoginToken(client, email, passwordHash, signal);
+    if (!login.key) throw new Error("Missing protected user key");
+    await this.completeLogin(client, login, await unlockUserKey(stretched, login.key), signal);
+  }
 
+  private async performDeviceLogin(
+    client: BitwardenClient,
+    email: string,
+    controller: AbortController,
+  ): Promise<void> {
+    const { signal } = controller;
+    signal.throwIfAborted();
+    const keys = await createDeviceLoginKeys(email);
+    signal.throwIfAborted();
+    const modal = new DeviceApprovalModal(this.ctx.app, keys.fingerprint, () => controller.abort());
+    modal.open();
+    const approval = await waitForDeviceApproval(
+      client, email, keys.publicKey, keys.accessCode, signal, () => modal.waiting(),
+    ).finally(() => modal.finish());
+    signal.throwIfAborted();
+
+    let rawKey: Uint8Array;
+    try {
+      rawKey = await keys.decryptApprovalKey(approval.encryptedKey);
+    } catch {
+      throw new Error(t("provider.bitwarden.deviceLoginKeyFailed"));
+    }
+    try {
+      if (rawKey.length !== (approval.legacy ? 32 : 64)) {
+        throw new Error(t("provider.bitwarden.deviceLoginKeyFailed"));
+      }
+      const login = await this.exchangeLoginToken(
+        client, email, keys.accessCode, signal, approval.requestId,
+      );
+      let userKey: SymmetricKey;
+      try {
+        // Older approving clients send the master key rather than the user key.
+        if (approval.legacy) {
+          if (!login.key) throw new Error("Missing protected user key");
+          userKey = await unlockUserKey(await stretchMasterKey(rawKey), login.key);
+        } else {
+          userKey = unpackUserKey(rawKey);
+        }
+      } catch {
+        throw new Error(t("provider.bitwarden.deviceLoginKeyFailed"));
+      }
+      await this.completeLogin(client, login, userKey, signal);
+    } finally {
+      rawKey.fill(0);
+    }
+  }
+
+  private async exchangeLoginToken(
+    client: BitwardenClient,
+    email: string,
+    credential: string,
+    signal: AbortSignal,
+    authRequestId?: string,
+  ): Promise<LoginResponse> {
     const deviceName = "Obsidian Secret Placeholders";
-    const attempt = (
-      extras: {
-        newDeviceOtp?: string;
-        twoFactor?: { token: string; provider: string };
-      } = {},
-    ) => this.client!.login(email, passwordHash, deviceName, extras);
-
-    let loginRes;
     let newDeviceOtp: string | undefined;
     let twoFactor: { token: string; provider: string } | undefined;
 
@@ -385,10 +468,15 @@ export class BitwardenProvider implements Provider {
     // (device OTP, 2FA TOTP) on demand.  Both challenges can appear in
     // any order depending on the server.
     for (let i = 0; i < 3; i++) {
+      signal.throwIfAborted();
       try {
-        loginRes = await attempt({ newDeviceOtp, twoFactor });
-        break;
+        const result = await client.login(email, credential, deviceName, {
+          authRequestId, newDeviceOtp, twoFactor,
+        });
+        signal.throwIfAborted();
+        return result;
       } catch (e) {
+        signal.throwIfAborted();
         if (BitwardenClient.isDeviceVerificationError(e) && !newDeviceOtp) {
           const otp = await this.promptDeviceOtp(email);
           if (!otp) throw new Error(t("provider.bitwarden.deviceVerifCancelled"));
@@ -409,23 +497,38 @@ export class BitwardenProvider implements Provider {
           twoFactor = { token: code, provider: "0" };
           continue;
         }
+        if (authRequestId) throw new Error(t("provider.bitwarden.deviceLoginTokenFailed"));
         throw e;
       }
     }
-    if (!loginRes) throw new Error(t("provider.bitwarden.loginRetriesExhausted"));
-    this.client.setTokens(
+    throw new Error(t("provider.bitwarden.loginRetriesExhausted"));
+  }
+
+  private async completeLogin(
+    client: BitwardenClient,
+    loginRes: LoginResponse,
+    userKey: SymmetricKey,
+    signal: AbortSignal,
+  ): Promise<void> {
+    signal.throwIfAborted();
+    if (this.client !== client) throw new Error(t("provider.bitwarden.serverUrlNotSet"));
+    client.setTokens(
       loginRes.access_token,
       loginRes.expires_in,
       loginRes.refresh_token ?? null,
     );
-    this.userKey = await unlockUserKey(stretched, loginRes.key);
+    this.userKey = userKey;
     // Invalidate any cached ciphers from a previous session.
     this.ciphers = null;
     this.cipherCacheExpires = 0;
 
     if (this.settings.rememberSession) {
-      await this.persistSession(this.userKey, loginRes.refresh_token ?? null);
+      await this.persistSession(userKey, loginRes.refresh_token ?? null, signal);
     }
+  }
+
+  dispose(): void {
+    this.loginAbort?.abort();
   }
 
   parseRef(raw: string): ProviderRef | null {
@@ -683,6 +786,7 @@ export class BitwardenProvider implements Provider {
           .setPlaceholder("https://vw.example.com")
           .setValue(this.settings.baseUrl)
           .onChange(async (v) => {
+            this.loginAbort?.abort();
             this.settings.baseUrl = v.replace(/\/+$/, "");
             if (this.settings.baseUrl) {
               this.client = new BitwardenClient({
