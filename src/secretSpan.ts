@@ -9,14 +9,14 @@ import { Notice, setIcon } from "obsidian";
 import { t } from "./i18n";
 import { attachSpanContextMenu } from "./contextMenu";
 import type SecretPlaceholdersPlugin from "./main";
-import type { Provider, ProviderRef } from "./providers/types";
+import type { DisplayValue, Provider, ProviderRef } from "./providers/types";
 import { ClickAction, MaskMode } from "./settings";
 
 type Phase = "loading" | "ready" | "error";
 
 interface SpanState {
   phase: Phase;
-  value: string | null;
+  resolved: DisplayValue | null;
   errorMessage: string | null;
   revealed: boolean;
   /** Generation counter so a stale in-flight load() can detect that it
@@ -42,7 +42,7 @@ export function renderSecretSpan(
 
   const state: SpanState = {
     phase: "loading",
-    value: null,
+    resolved: null,
     errorMessage: null,
     revealed: false,
     loadGen: 0,
@@ -105,31 +105,33 @@ export function renderSecretSpan(
 
     // phase === "ready"
     span.title = ref.raw.slice(2, -2);
-    const masked = shouldMask(plugin.settings.maskMode, state.revealed);
+    const masked = !state.resolved?.alwaysVisible &&
+      shouldMask(plugin.settings.maskMode, state.revealed);
     span.classList.add(masked ? "sp-secret--masked" : "sp-secret--revealed");
     span.textContent = masked
       ? plugin.settings.maskCharacter.repeat(
-          Math.max(4, state.value?.length ?? 4),
+          Math.max(4, state.resolved?.value.length ?? 4),
         )
-      : (state.value ?? "");
+      : (state.resolved?.value ?? "");
   };
 
   const load = async (): Promise<void> => {
     const gen = ++state.loadGen;
     state.phase = "loading";
-    state.value = null;
+    state.resolved = null;
     state.errorMessage = null;
     render();
     try {
-      const v = await provider.readKey(ref);
+      const resolved = provider.readForDisplay
+        ? await provider.readForDisplay(ref)
+        : { value: await provider.readKey(ref), alwaysVisible: false };
       if (gen !== state.loadGen) return; // superseded
       state.phase = "ready";
-      state.value = v;
+      state.resolved = resolved;
       render();
     } catch (e) {
       if (gen !== state.loadGen) return; // superseded
       state.phase = "error";
-      state.value = null;
       state.errorMessage = (e as Error)?.message ?? String(e);
       render();
     }
@@ -166,7 +168,7 @@ export function renderSecretSpan(
     // Only resolved values are clickable.  In loading and error states
     // a click is a no-op (we don't want toggle-mask to flicker into a
     // spinner that never resolves).
-    if (state.phase !== "ready" || state.value === null) return;
+    if (state.phase !== "ready" || state.resolved === null) return;
     const action: ClickAction =
       e.ctrlKey || e.metaKey
         ? plugin.settings.modifierClickAction
@@ -195,14 +197,15 @@ function applyAction(
 ): void {
   switch (action) {
     case "copy": {
-      if (state.value === null) return;
+      if (state.resolved === null) return;
       void navigator.clipboard
-        .writeText(state.value)
+        .writeText(state.resolved.value)
         .then(() => new Notice(t("notice.secretCopied")))
         .catch(() => new Notice(t("span.copyFailed")));
       return;
     }
     case "toggle-mask":
+      if (state.resolved?.alwaysVisible) return;
       state.revealed = !state.revealed;
       rerender();
       return;

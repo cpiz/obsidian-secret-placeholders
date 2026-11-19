@@ -24,6 +24,7 @@ import {
   encryptStringWithPassphrase,
 } from "../../crypto/passphraseEncryption";
 import {
+  DisplayValue,
   NoteContext,
   PluginContext,
   Provider,
@@ -110,7 +111,7 @@ interface DecryptedCipher {
   cipherKeyEnc: string | null;
   password: string | null;
   username: string | null;
-  fields: Map<string, string>;
+  fields: Map<string, { value: string; type: number | undefined }>;
   /** Original EncStrings, so writeKey can echo back sibling fields it isn't
    *  touching instead of accidentally clearing them on PUT. */
   raw: {
@@ -447,6 +448,10 @@ export class BitwardenProvider implements Provider {
   }
 
   async readKey(ref: ProviderRef): Promise<string> {
+    return (await this.readForDisplay(ref)).value;
+  }
+
+  async readForDisplay(ref: ProviderRef): Promise<DisplayValue> {
     const ciphers = await this.getCiphers();
     const match = findCipher(ciphers, ref.parts);
     if (!match) {
@@ -462,19 +467,22 @@ export class BitwardenProvider implements Provider {
       if (match.password === null) {
         throw new BitwardenApiError(404, "no password on item");
       }
-      return match.password;
+      return { value: match.password, alwaysVisible: false };
     }
     if (field === "username") {
       if (match.username === null) {
         throw new BitwardenApiError(404, "no username on item");
       }
-      return match.username;
+      return { value: match.username, alwaysVisible: match.type === 1 };
     }
     const v = match.fields.get(field);
     if (v === undefined) {
       throw new BitwardenApiError(404, `field '${ref.parts.field}' not found`);
     }
-    return v;
+    return {
+      value: v.value,
+      alwaysVisible: field !== "password" && (v.type === 0 || v.type === 2),
+    };
   }
 
   async writeKey(ref: ProviderRef, value: string): Promise<void> {
@@ -728,10 +736,17 @@ export class BitwardenProvider implements Provider {
   // --- internals ---------------------------------------------------------
 
   private async getCiphers(): Promise<DecryptedCipher[]> {
+    const userKey = this.userKey;
+    if (!userKey) throw new BitwardenApiError(401, "not logged in");
     const now = Date.now();
     if (this.ciphers && now < this.cipherCacheExpires) return this.ciphers;
     if (this.syncInflight) return this.syncInflight;
-    this.syncInflight = this.syncAndDecrypt();
+    this.syncInflight = this.syncAndDecrypt().then((ciphers) => {
+      if (this.userKey !== userKey) {
+        throw new BitwardenApiError(401, "Bitwarden session changed during sync");
+      }
+      return ciphers;
+    });
     try {
       const c = await this.syncInflight;
       this.ciphers = c;
@@ -817,7 +832,7 @@ export class BitwardenProvider implements Provider {
       const username = c.Login?.Username
         ? await safeDecrypt(itemKey, c.Login.Username)
         : null;
-      const fields = new Map<string, string>();
+      const fields: DecryptedCipher["fields"] = new Map();
       const rawFields = new Map<
         string,
         { nameEnc: string; valueEnc: string | null; type: number }
@@ -827,11 +842,12 @@ export class BitwardenProvider implements Provider {
         const fname = await safeDecrypt(itemKey, f.Name);
         if (fname === null) continue;
         const fval = f.Value ? await safeDecrypt(itemKey, f.Value) : "";
-        fields.set(fname.toLowerCase(), fval ?? "");
+        fields.set(fname.toLowerCase(), { value: fval ?? "", type: f.Type });
         rawFields.set(fname.toLowerCase(), {
           nameEnc: f.Name,
           valueEnc: f.Value ?? null,
-          type: f.Type ?? 1,
+          // Keep the existing write payload default for fields without a type.
+          type: f.Type ?? 0,
         });
       }
       const createdAt = Date.parse(c.CreationDate ?? "");

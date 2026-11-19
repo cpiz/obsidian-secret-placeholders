@@ -62,6 +62,11 @@ export interface PluginContext {
   notifyAuthChanged(providerId: string): void;
 }
 
+export interface DisplayValue {
+  value: string;
+  alwaysVisible: boolean;
+}
+
 export interface Provider {
   /** Stable, short identifier. e.g. "bao", "1p", "vw". */
   id: string;
@@ -82,6 +87,8 @@ export interface Provider {
   optionalRefParts?: string[];
 
   readKey(ref: ProviderRef): Promise<string>;
+  /** Resolve a value and its visibility for inline rendering in one read. */
+  readForDisplay?(ref: ProviderRef): Promise<DisplayValue>;
   writeKey(ref: ProviderRef, value: string): Promise<void>;
   /** Best-effort enumeration for autocomplete / browser modal. May return
    *  an empty list if the provider can't enumerate cheaply. */

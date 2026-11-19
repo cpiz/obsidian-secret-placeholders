@@ -78,7 +78,7 @@ export interface SyncCipherField {
   /** EncString of the field value.  May be null for empty fields. */
   Value: string | null;
   /** Field type: 0=text, 1=hidden (password), 2=boolean, 3=linked. */
-  Type: number;
+  Type?: number;
 }
 
 export interface SyncCipherLogin {
@@ -542,7 +542,7 @@ function normalizeField(raw: unknown): SyncCipherField {
   return {
     Name: pick<string>(r, "Name", "name") ?? "",
     Value: pick<string | null>(r, "Value", "value") ?? null,
-    Type: pick<number>(r, "Type", "type") ?? 0,
+    Type: pick<number | null>(r, "Type", "type") ?? undefined,
   };
 }
 

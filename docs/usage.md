@@ -24,6 +24,10 @@ The **Mask mode** setting controls how a resolved value is shown:
 - **Always** — the value is always shown as dots.
 - **Manual** — masked by default; click to reveal individually.
 
+Bitwarden 和 Vaultwarden 的内置用户名、普通文本和布尔自定义字段在阅读视图和实时预览中直接显示。
+登录密码和安全笔记的 `#password` 始终遵循遮罩设置，隐藏、关联及类型不明的字段也一样。
+直接显示的字段仍可点击复制，切换遮罩操作对这些字段不生效。
+
 While a secret is being fetched a small spinner shows. If a fetch fails
 the placeholder shows `[secret: error]`; hover for the reason. When the
 failure is an auth error, an inline **Re-login** button appears.
