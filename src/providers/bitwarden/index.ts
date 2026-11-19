@@ -4,7 +4,7 @@
 //   - <folder> is optional. If omitted, match by title across folders.
 //   - <item> is the cipher (item) title.
 //   - <field> is one of:
-//       - "password" (default) -> Login.Password
+//       - "password" -> Login.Password or the secure note's custom Password field
 //       - "username" -> Login.Username
 //       - <custom field label> from cipher.Fields[]
 //
@@ -458,7 +458,7 @@ export class BitwardenProvider implements Provider {
       );
     }
     const field = (ref.parts.field ?? "").toLowerCase();
-    if (field === "password") {
+    if (field === "password" && match.type === 1) {
       if (match.password === null) {
         throw new BitwardenApiError(404, "no password on item");
       }
@@ -487,6 +487,10 @@ export class BitwardenProvider implements Provider {
     const existing = findCipher(ciphers, ref.parts);
     if (ref.parts.id && !existing) {
       throw new BitwardenApiError(404, `item '${ref.parts.id}' not found`);
+    }
+    if (existing?.type === 2 && field === "password") {
+      const message = t("provider.bitwarden.editSecureNotePasswordInVault");
+      throw new BitwardenApiError(400, message, message);
     }
     if (ref.parts.id && existing?.type !== 1) {
       throw new BitwardenApiError(400, "only login items can be updated by ID");

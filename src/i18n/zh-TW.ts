@@ -226,6 +226,8 @@ export const zhTW: Messages = {
     "回呼缺少 state/code 查詢參數",
   "provider.openbao.oidc.timeout": "OIDC 回呼在 {sec} 秒後逾時",
   "provider.bitwarden.serverUrlNotSet": "尚未設定 Bitwarden 伺服器 URL",
+  "provider.bitwarden.editSecureNotePasswordInVault":
+    "請在 Bitwarden 或 Vaultwarden 網頁密碼庫中修改此安全筆記的 Password 欄位。",
   "provider.bitwarden.ambiguousItem": "找到多個符合「{item}」的 Bitwarden 項目。請重新選擇項目並插入 ID 佔位符。",
   "provider.bitwarden.deviceVerifCancelled": "裝置驗證已取消",
   "provider.bitwarden.twoFactorCancelled": "兩步驟驗證已取消",

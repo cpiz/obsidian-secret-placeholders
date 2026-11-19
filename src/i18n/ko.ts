@@ -226,6 +226,8 @@ export const ko: Messages = {
     "콜백에 state/code 쿼리 매개변수가 없습니다",
   "provider.openbao.oidc.timeout": "OIDC 콜백이 {sec}초 후 시간 초과되었습니다",
   "provider.bitwarden.serverUrlNotSet": "Bitwarden 서버 URL이 설정되지 않았습니다",
+  "provider.bitwarden.editSecureNotePasswordInVault":
+    "이 보안 메모의 Password 필드는 Bitwarden 또는 Vaultwarden 웹 보관함에서 수정하세요.",
   "provider.bitwarden.ambiguousItem": "‘{item}’에 해당하는 Bitwarden 항목이 여러 개입니다. 항목을 다시 선택하여 ID 참조를 삽입하세요.",
   "provider.bitwarden.deviceVerifCancelled": "기기 확인이 취소되었습니다",
   "provider.bitwarden.twoFactorCancelled": "2단계 인증이 취소되었습니다",
