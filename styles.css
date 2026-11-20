@@ -30,6 +30,8 @@
 }
 
 .sp-secret--masked {
+  display: inline;
+  line-break: anywhere;
   letter-spacing: 1px;
 }
 
