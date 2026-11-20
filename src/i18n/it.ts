@@ -168,7 +168,10 @@ export const it: Messages = {
   "provider.bitwarden.deviceLoginSending":
     "Invio della richiesta di approvazione…",
   "provider.bitwarden.deviceLoginFingerprint":
-    "Approva solo se questa frase di impronta corrisponde a quella mostrata sull’altro dispositivo.",
+    "Controlla la frase dell’impronta mostrata nel client Bitwarden. Approva solo se coincide.",
+  "provider.bitwarden.deviceLoginOpenApp": "Apri Bitwarden",
+  "provider.bitwarden.deviceLoginOpenAppFailed":
+    "Impossibile aprire Bitwarden. Apri manualmente l’app desktop.",
   "provider.bitwarden.deviceLoginWaiting":
     "In attesa dell’approvazione nell’app Bitwarden in cui hai effettuato l’accesso…",
   "provider.bitwarden.deviceLoginRequestFailed":

@@ -444,7 +444,7 @@ export class BitwardenProvider implements Provider {
     const modal = new DeviceApprovalModal(this.ctx.app, keys.fingerprint, () => controller.abort());
     modal.open();
     const approval = await waitForDeviceApproval(
-      client, email, keys.publicKey, keys.accessCode, signal, () => modal.waiting(),
+      client, email, keys.publicKey, keys.accessCode, signal, () => void modal.waiting(),
     ).finally(() => modal.finish());
     signal.throwIfAborted();
 

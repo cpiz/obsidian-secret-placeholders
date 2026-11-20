@@ -167,7 +167,10 @@ export const zhTW: Messages = {
   "provider.bitwarden.deviceLoginSending":
     "正在傳送登入核准請求…",
   "provider.bitwarden.deviceLoginFingerprint":
-    "請核對另一部裝置顯示的指紋短語，只有一致時才核准。",
+    "請核對 Bitwarden 用戶端上顯示的指紋短語，只有一致時才核准。",
+  "provider.bitwarden.deviceLoginOpenApp": "開啟 Bitwarden",
+  "provider.bitwarden.deviceLoginOpenAppFailed":
+    "無法開啟 Bitwarden，請手動開啟桌面用戶端。",
   "provider.bitwarden.deviceLoginWaiting":
     "等待已登入的 Bitwarden 用戶端核准…",
   "provider.bitwarden.deviceLoginRequestFailed":

@@ -170,7 +170,10 @@ export const en = {
   "provider.bitwarden.deviceLoginSending":
     "Sending an approval request…",
   "provider.bitwarden.deviceLoginFingerprint":
-    "Approve only if this fingerprint phrase matches the one on your other device.",
+    "Check the fingerprint phrase in your Bitwarden client. Approve only if it matches.",
+  "provider.bitwarden.deviceLoginOpenApp": "Open Bitwarden",
+  "provider.bitwarden.deviceLoginOpenAppFailed":
+    "Could not open Bitwarden. Open the desktop app manually.",
   "provider.bitwarden.deviceLoginWaiting":
     "Waiting for approval in your signed-in Bitwarden app…",
   "provider.bitwarden.deviceLoginRequestFailed":

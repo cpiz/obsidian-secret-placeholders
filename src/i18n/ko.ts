@@ -167,7 +167,10 @@ export const ko: Messages = {
   "provider.bitwarden.deviceLoginSending":
     "승인 요청을 보내는 중…",
   "provider.bitwarden.deviceLoginFingerprint":
-    "다른 기기에 표시된 지문 문구가 일치할 때만 승인하세요.",
+    "Bitwarden 클라이언트에 표시된 지문 문구를 확인하고 일치할 때만 승인하세요.",
+  "provider.bitwarden.deviceLoginOpenApp": "Bitwarden 열기",
+  "provider.bitwarden.deviceLoginOpenAppFailed":
+    "Bitwarden을 열 수 없습니다. 데스크톱 앱을 직접 열어 주세요.",
   "provider.bitwarden.deviceLoginWaiting":
     "로그인된 Bitwarden 앱에서 승인을 기다리는 중…",
   "provider.bitwarden.deviceLoginRequestFailed":

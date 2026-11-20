@@ -2,9 +2,10 @@
 // The master password never leaves this process - we use it locally to
 // derive keys, then send only the derived password-hash to the server.
 
-import { App, ButtonComponent, Modal, Setting } from "obsidian";
+import { App, ButtonComponent, Modal, Notice, Setting } from "obsidian";
 
 import { t } from "../../i18n";
+import { hasBitwardenDesktop, openBitwardenDesktop } from "./desktopApp";
 
 type BitwardenCredentials =
   | { method: "password"; email: string; masterPassword: string }
@@ -104,6 +105,7 @@ export class BitwardenLoginModal extends Modal {
 
 export class DeviceApprovalModal extends Modal {
   private statusEl: HTMLElement | null = null;
+  private openAppButton: ButtonComponent | null = null;
   private finished = false;
 
   constructor(
@@ -120,11 +122,27 @@ export class DeviceApprovalModal extends Modal {
     this.contentEl.createEl("p", { text: t("provider.bitwarden.deviceLoginFingerprint") });
     this.contentEl.createEl("p").createEl("strong", { text: this.fingerprint });
     new Setting(this.contentEl)
+      .addButton((button) => {
+        button.setButtonText(t("provider.bitwarden.deviceLoginOpenApp"));
+        button.buttonEl.hide();
+        button.onClick(async () => {
+          button.setDisabled(true);
+          try {
+            await openBitwardenDesktop();
+          } catch {
+            if (!this.finished) new Notice(t("provider.bitwarden.deviceLoginOpenAppFailed"));
+          } finally {
+            button.setDisabled(false);
+          }
+        });
+        this.openAppButton = button;
+      })
       .addButton((b) => b.setButtonText(t("button.cancel")).onClick(() => this.close()));
   }
 
-  waiting(): void {
+  async waiting(): Promise<void> {
     this.statusEl?.setText(t("provider.bitwarden.deviceLoginWaiting"));
+    if (await hasBitwardenDesktop()) this.openAppButton?.buttonEl.show();
   }
 
   finish(): void {
@@ -135,6 +153,7 @@ export class DeviceApprovalModal extends Modal {
 
   onClose(): void {
     this.statusEl = null;
+    this.openAppButton = null;
     this.contentEl.empty();
     if (!this.finished) {
       this.finished = true;

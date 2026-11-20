@@ -167,7 +167,10 @@ export const ja: Messages = {
   "provider.bitwarden.deviceLoginSending":
     "承認リクエストを送信しています…",
   "provider.bitwarden.deviceLoginFingerprint":
-    "別のデバイスに表示されたフィンガープリントフレーズと一致する場合のみ承認してください。",
+    "Bitwarden クライアントに表示されたフィンガープリントフレーズを確認し、一致する場合のみ承認してください。",
+  "provider.bitwarden.deviceLoginOpenApp": "Bitwarden を開く",
+  "provider.bitwarden.deviceLoginOpenAppFailed":
+    "Bitwarden を開けませんでした。デスクトップアプリを手動で開いてください。",
   "provider.bitwarden.deviceLoginWaiting":
     "ログイン済みの Bitwarden アプリでの承認を待っています…",
   "provider.bitwarden.deviceLoginRequestFailed":
