@@ -112,6 +112,7 @@ export const ko: Messages = {
   "modal.secretBrowser.fieldPlaceholder": "필드 검색…",
   "modal.secretBrowser.noFields": "이 항목에는 참조할 수 있는 필드가 없습니다.",
   "modal.secretBrowser.searchPlaceholder": "시크릿 검색…",
+  "modal.secretBrowser.loadFailed": "{provider}: 시크릿을 불러오지 못했습니다. 연결을 확인한 후 다시 시도하세요.",
 
   // 시크릿 스팬
   "span.reLogin": "다시 로그인",
@@ -140,6 +141,7 @@ export const ko: Messages = {
   "provider.bitwarden.serverNotSet":
     "Bitwarden: 먼저 설정에서 서버 URL을 지정하세요",
   "provider.bitwarden.sessionRestored": "Bitwarden 세션을 복원했습니다",
+  "provider.bitwarden.persistRefreshFailed": "갱신된 Bitwarden 세션을 이 기기에 저장하지 못했습니다.",
   "provider.bitwarden.restoreFailed":
     "Bitwarden 세션을 복원할 수 없습니다: {msg}. '로그인'을 사용하여 마스터 비밀번호로 로그인하세요.",
   "provider.bitwarden.unlockSession": "Bitwarden 세션 잠금 해제",

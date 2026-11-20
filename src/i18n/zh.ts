@@ -112,6 +112,7 @@ export const zh: Messages = {
   "modal.secretBrowser.fieldPlaceholder": "搜索字段…",
   "modal.secretBrowser.noFields": "这个项目没有可引用的字段。",
   "modal.secretBrowser.searchPlaceholder": "搜索密钥…",
+  "modal.secretBrowser.loadFailed": "{provider}：加载密钥失败，请检查连接后重试。",
 
   // 密钥内联元素
   "span.reLogin": "重新登录",
@@ -140,6 +141,7 @@ export const zh: Messages = {
   "provider.bitwarden.serverNotSet":
     "Bitwarden：请先在设置中填写服务器 URL",
   "provider.bitwarden.sessionRestored": "Bitwarden 会话已恢复",
+  "provider.bitwarden.persistRefreshFailed": "无法将续期后的 Bitwarden 会话保存到本机。",
   "provider.bitwarden.restoreFailed":
     "无法恢复 Bitwarden 会话：{msg}。请使用“登录”以主密码登录。",
   "provider.bitwarden.unlockSession": "解锁 Bitwarden 会话",

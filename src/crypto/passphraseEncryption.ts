@@ -49,8 +49,16 @@ export async function encryptBytesWithPassphrase(
   passphrase: string,
 ): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(SALT_LEN));
-  const iv = crypto.getRandomValues(new Uint8Array(IV_LEN));
   const key = await deriveKey(passphrase, salt);
+  return encryptBytes(plain, key, salt);
+}
+
+async function encryptBytes(
+  plain: Uint8Array,
+  key: CryptoKey,
+  salt: Uint8Array,
+): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(IV_LEN));
   const ct = new Uint8Array(
     await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plain),
   );
@@ -73,14 +81,33 @@ export async function decryptBytesWithPassphrase(
   blob: string,
   passphrase: string,
 ): Promise<Uint8Array> {
+  const buf = decodeBlob(blob);
+  const key = await deriveKey(passphrase, buf.slice(0, SALT_LEN));
+  return decryptBytes(buf, key);
+}
+
+/** Keep only the derived key in memory so a rotated token can be re-encrypted. */
+export async function createPassphraseStringCipher(passphrase: string, blob?: string) {
+  const buf = blob === undefined ? undefined : decodeBlob(blob);
+  const salt = buf?.slice(0, SALT_LEN) ?? crypto.getRandomValues(new Uint8Array(SALT_LEN));
+  const key = await deriveKey(passphrase, salt);
+  return {
+    value: buf ? new TextDecoder().decode(await decryptBytes(buf, key)) : undefined,
+    encrypt: (value: string) => encryptBytes(new TextEncoder().encode(value), key, salt),
+  };
+}
+
+function decodeBlob(blob: string): Uint8Array {
   const buf = b64decode(blob);
   if (buf.length < SALT_LEN + IV_LEN + 1) {
     throw new Error("encrypted blob too short");
   }
-  const salt = buf.slice(0, SALT_LEN);
+  return buf;
+}
+
+async function decryptBytes(buf: Uint8Array, key: CryptoKey): Promise<Uint8Array> {
   const iv = buf.slice(SALT_LEN, SALT_LEN + IV_LEN);
   const ct = buf.slice(SALT_LEN + IV_LEN);
-  const key = await deriveKey(passphrase, salt);
   const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
   return new Uint8Array(pt);
 }

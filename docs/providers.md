@@ -117,6 +117,11 @@ encryption key and refresh token on disk under a passphrase you choose.
 On the next Obsidian start it asks for that passphrase instead of your
 master password. Off by default.
 
+Obsidian 保持运行时，插件会在访问令牌到期后按需续期。
+网络故障或服务器错误会提示密钥加载失败，连接恢复后可重新打开插入窗口。
+服务器拒绝会话续期时，状态栏会更新，插入窗口会提示重新登录。
+关闭「记住会话」时，重启 Obsidian 后需要重新登录。
+
 **Organizations:** items owned by a Bitwarden organization are supported
 — the plugin unwraps each organization's key (via your RSA private key)
 and decrypts org ciphers with it. New items you create still go to your

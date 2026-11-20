@@ -14,6 +14,15 @@ export class BitwardenApiError extends Error {
   }
 }
 
+function isInvalidGrant(error: BitwardenApiError): boolean {
+  if (error.status !== 400) return false;
+  try {
+    return (JSON.parse(error.body) as { error?: string } | null)?.error === "invalid_grant";
+  } catch {
+    return false;
+  }
+}
+
 export interface PreloginResponse {
   /** 0 = PBKDF2-SHA256, 1 = Argon2id. */
   kdf: number;
@@ -139,8 +148,14 @@ export class BitwardenClient {
   private accessToken: string | null = null;
   private accessTokenExpiresAt = 0;
   private refreshToken: string | null = null;
+  private sessionVersion = 0;
+  private refreshInflight: Promise<string> | null = null;
 
-  constructor(private opts: ClientOptions) {}
+  constructor(
+    private opts: ClientOptions,
+    private onSessionExpired: () => void = () => {},
+    private onRefreshTokenChanged: (token: string) => Promise<void> = async () => {},
+  ) {}
 
   canUseDeviceLogin(): boolean {
     try {
@@ -156,22 +171,34 @@ export class BitwardenClient {
     expiresInSec: number,
     refreshToken: string | null,
   ): void {
+    this.sessionVersion++;
+    this.refreshInflight = null;
+    this.updateTokens(accessToken, expiresInSec, refreshToken);
+  }
+
+  private updateTokens(
+    accessToken: string,
+    expiresInSec: number,
+    refreshToken: string | null,
+  ): void {
     this.accessToken = accessToken;
     this.accessTokenExpiresAt = Date.now() + Math.max(0, expiresInSec - 30) * 1000;
     this.refreshToken = refreshToken;
   }
 
   clearTokens(): void {
+    this.sessionVersion++;
+    this.refreshInflight = null;
     this.accessToken = null;
     this.refreshToken = null;
     this.accessTokenExpiresAt = 0;
   }
 
-  getRefreshToken(): string | null {
-    return this.refreshToken;
+  hasSession(): boolean {
+    return this.hasValidAccessToken() || this.refreshToken !== null;
   }
 
-  hasValidAccessToken(): boolean {
+  private hasValidAccessToken(): boolean {
     return (
       this.accessToken !== null && Date.now() < this.accessTokenExpiresAt
     );
@@ -372,13 +399,53 @@ export class BitwardenClient {
     }
   }
 
-  async refresh(): Promise<LoginResponse> {
-    if (!this.refreshToken) {
-      throw new BitwardenApiError(401, "no refresh token");
+  async refreshAccessToken(): Promise<string> {
+    if (this.refreshInflight) return this.refreshInflight;
+    const refreshToken = this.refreshToken;
+    if (!refreshToken) {
+      if (this.accessToken) this.expireSession();
+      throw new BitwardenApiError(401, "not logged in");
     }
+    const version = this.sessionVersion;
+    const pending = this.exchangeRefreshToken(refreshToken).then(async (tokens) => {
+      this.checkSession(version);
+      const nextRefreshToken = tokens.refresh_token ?? refreshToken;
+      this.updateTokens(tokens.access_token, tokens.expires_in, nextRefreshToken);
+      if (nextRefreshToken !== refreshToken) {
+        await this.onRefreshTokenChanged(nextRefreshToken);
+        this.checkSession(version);
+      }
+      return tokens.access_token;
+    }, (error: unknown) => {
+      if (this.sessionVersion === version && error instanceof BitwardenApiError &&
+          (error.status === 401 || isInvalidGrant(error))) {
+        this.expireSession();
+      }
+      throw error;
+    });
+    this.refreshInflight = pending;
+    try {
+      return await pending;
+    } finally {
+      if (this.refreshInflight === pending) this.refreshInflight = null;
+    }
+  }
+
+  private expireSession(): void {
+    this.clearTokens();
+    this.onSessionExpired();
+  }
+
+  private checkSession(version: number): void {
+    if (version !== this.sessionVersion) {
+      throw new BitwardenApiError(401, "Bitwarden session changed");
+    }
+  }
+
+  private async exchangeRefreshToken(refreshToken: string): Promise<LoginResponse> {
     const body = new URLSearchParams({
       grant_type: "refresh_token",
-      refresh_token: this.refreshToken,
+      refresh_token: refreshToken,
       client_id: "connector",
     });
     const res = await requestUrl({
@@ -393,7 +460,7 @@ export class BitwardenClient {
       throw: false,
     });
     if (res.status >= 400) throw new BitwardenApiError(res.status, res.text);
-    return normalizeLoginResponse(res.json);
+    return normalizeLoginResponse(res.json, false);
   }
 
   private async authedRequest<T>(
@@ -401,14 +468,39 @@ export class BitwardenClient {
     path: string,
     body?: unknown,
   ): Promise<T> {
-    if (!this.accessToken) {
-      throw new BitwardenApiError(401, "not logged in");
+    const version = this.sessionVersion;
+    const accessToken = this.hasValidAccessToken() && this.accessToken
+      ? this.accessToken
+      : await this.refreshAccessToken();
+    this.checkSession(version);
+    let res = await this.sendAuthedRequest(accessToken, method, path, body);
+    this.checkSession(version);
+    if (res.status === 401) {
+      // Concurrent requests may already have replaced the rejected token.
+      const retryToken = this.accessToken !== accessToken && this.accessToken
+        ? this.accessToken
+        : await this.refreshAccessToken();
+      this.checkSession(version);
+      res = await this.sendAuthedRequest(retryToken, method, path, body);
+      this.checkSession(version);
+      if (res.status === 401 && this.accessToken === retryToken) this.expireSession();
     }
-    const res = await requestUrl({
+    if (res.status >= 400) throw new BitwardenApiError(res.status, res.text);
+    if (res.status === 204 || !res.text) return undefined as unknown as T;
+    return res.json as T;
+  }
+
+  private sendAuthedRequest(
+    accessToken: string,
+    method: string,
+    path: string,
+    body?: unknown,
+  ) {
+    return requestUrl({
       url: this.apiUrl(path),
       method,
       headers: {
-        Authorization: `Bearer ${this.accessToken}`,
+        Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
         Accept: "application/json",
         ...this.bitwardenHeaders(),
@@ -416,9 +508,6 @@ export class BitwardenClient {
       body: body === undefined ? undefined : JSON.stringify(body),
       throw: false,
     });
-    if (res.status >= 400) throw new BitwardenApiError(res.status, res.text);
-    if (res.status === 204 || !res.text) return undefined as unknown as T;
-    return res.json as T;
   }
 
   async sync(): Promise<SyncResponse> {

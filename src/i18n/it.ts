@@ -113,6 +113,7 @@ export const it: Messages = {
   "modal.secretBrowser.fieldPlaceholder": "Cerca campi…",
   "modal.secretBrowser.noFields": "Questo elemento non ha campi che possono essere referenziati.",
   "modal.secretBrowser.searchPlaceholder": "Cerca segreti…",
+  "modal.secretBrowser.loadFailed": "{provider}: impossibile caricare i segreti. Controlla la connessione e riprova.",
 
   // Span segreto
   "span.reLogin": "Accedi di nuovo",
@@ -141,6 +142,7 @@ export const it: Messages = {
   "provider.bitwarden.serverNotSet":
     "Bitwarden: imposta prima l'URL del server nelle impostazioni",
   "provider.bitwarden.sessionRestored": "Sessione Bitwarden ripristinata",
+  "provider.bitwarden.persistRefreshFailed": "Impossibile salvare la sessione Bitwarden rinnovata su questo dispositivo.",
   "provider.bitwarden.restoreFailed":
     "Impossibile ripristinare la sessione Bitwarden: {msg}. Usa 'Accedi' per accedere con la master password.",
   "provider.bitwarden.unlockSession": "Sblocca la sessione Bitwarden",

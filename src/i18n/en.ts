@@ -115,6 +115,7 @@ export const en = {
   "modal.secretBrowser.fieldPlaceholder": "Search fields…",
   "modal.secretBrowser.noFields": "This project has no fields that can be referenced.",
   "modal.secretBrowser.searchPlaceholder": "Search secrets…",
+  "modal.secretBrowser.loadFailed": "{provider}: Could not load secrets. Check the connection and try again.",
 
   // Secret span
   "span.reLogin": "Re-login",
@@ -143,6 +144,7 @@ export const en = {
   "provider.bitwarden.serverNotSet":
     "Bitwarden: set the server URL in settings first",
   "provider.bitwarden.sessionRestored": "Bitwarden session restored",
+  "provider.bitwarden.persistRefreshFailed": "The refreshed Bitwarden session could not be saved on this device.",
   "provider.bitwarden.restoreFailed":
     "Could not restore Bitwarden session: {msg}. Use 'Log in' to sign in with master password.",
   "provider.bitwarden.unlockSession": "Unlock Bitwarden session",

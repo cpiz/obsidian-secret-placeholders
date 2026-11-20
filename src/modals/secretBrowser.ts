@@ -53,7 +53,13 @@ export class SecretBrowserModal extends FuzzySuggestModal<Entry> {
         const refs = await provider.list();
         for (const ref of refs) out.push({ provider, ref, order: out.length });
       } catch {
-        /* skip providers that fail to list */
+        const status = await provider.auth.status().catch(() => null);
+        const message = status?.loggedIn === false
+          ? "notice.logInFirst"
+          : "modal.secretBrowser.loadFailed";
+        if (this.modalEl.isConnected) {
+          new Notice(t(message, { provider: provider.displayName }));
+        }
       }
     }
     this.entries = out;

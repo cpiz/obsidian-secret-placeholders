@@ -18,10 +18,9 @@ import { Notice, Setting } from "obsidian";
 import { t } from "../../i18n";
 import { renderAuthStatusRow } from "../../authStatusRow";
 import {
+  createPassphraseStringCipher,
   decryptBytesWithPassphrase,
-  decryptStringWithPassphrase,
   encryptBytesWithPassphrase,
-  encryptStringWithPassphrase,
 } from "../../crypto/passphraseEncryption";
 import {
   DisplayValue,
@@ -144,14 +143,12 @@ export class BitwardenProvider implements Provider {
   private client: BitwardenClient | null = null;
   /** User encryption key, in memory only.  Cleared on logout. */
   private userKey: SymmetricKey | null = null;
-  /** Organization symmetric keys by org id, derived each sync.  Used to
-   *  decrypt and write organization-owned ciphers. */
-  private orgKeys = new Map<string, SymmetricKey>();
   /** Decrypted cipher cache.  Refreshed on demand. */
   private ciphers: DecryptedCipher[] | null = null;
   private cipherCacheExpires = 0;
   private syncInflight: Promise<DecryptedCipher[]> | null = null;
   private loginAbort: AbortController | null = null;
+  private encryptRefreshToken: ((token: string) => Promise<string>) | null = null;
   private listeners = new Set<() => void>();
 
   auth: ProviderAuth;
@@ -161,7 +158,7 @@ export class BitwardenProvider implements Provider {
       status: async (): Promise<ProviderAuthStatus> => {
         if (!this.client || !this.userKey) return { loggedIn: false };
         return {
-          loggedIn: this.client.hasValidAccessToken(),
+          loggedIn: this.client.hasSession(),
           identity: this.settings.email || undefined,
         };
       },
@@ -174,11 +171,7 @@ export class BitwardenProvider implements Provider {
       },
       logout: async () => {
         this.loginAbort?.abort();
-        this.client?.clearTokens();
-        this.userKey = null;
-        this.orgKeys.clear();
-        this.ciphers = null;
-        this.cipherCacheExpires = 0;
+        this.clearSession();
         this.settings.encryptedUserKey = null;
         this.settings.encryptedRefreshToken = null;
         await this.persist();
@@ -209,13 +202,7 @@ export class BitwardenProvider implements Provider {
       this.settings.deviceIdentifier = newDeviceIdentifier();
       await this.persist();
     }
-    if (this.settings.baseUrl) {
-      this.client = new BitwardenClient({
-        baseUrl: this.settings.baseUrl,
-        deviceIdentifier: this.settings.deviceIdentifier,
-        clientVersion: this.ctx.pluginVersion ?? "0.0.0",
-      });
-    }
+    this.configureClient();
     // Restore a persisted session if the user opted in.  This prompts for
     // an unlock passphrase; on success we decrypt the user key + refresh
     // token and mint a fresh access token via the refresh_token grant,
@@ -223,22 +210,61 @@ export class BitwardenProvider implements Provider {
     void this.tryRestoreSession();
   }
 
+  private configureClient(): void {
+    if (!this.settings.baseUrl) {
+      this.client = null;
+      return;
+    }
+    this.client = new BitwardenClient({
+      baseUrl: this.settings.baseUrl,
+      deviceIdentifier: this.settings.deviceIdentifier,
+      clientVersion: this.ctx.pluginVersion,
+    }, () => {
+      this.clearSession();
+      this.ctx.notifyAuthChanged(this.id);
+      this.notify();
+    }, (token) => this.persistRefreshedToken(token));
+  }
+
+  private clearSession(): void {
+    this.client?.clearTokens();
+    this.userKey = null;
+    this.encryptRefreshToken = null;
+    this.clearCache();
+    this.syncInflight = null;
+  }
+
+  private async persistRefreshedToken(token: string): Promise<void> {
+    const encrypt = this.encryptRefreshToken;
+    if (!encrypt) return;
+    try {
+      const encrypted = await encrypt(token);
+      if (this.encryptRefreshToken !== encrypt) return;
+      this.settings.encryptedRefreshToken = encrypted;
+      await this.persist();
+    } catch {
+      new Notice(t("provider.bitwarden.persistRefreshFailed"));
+    }
+  }
+
   private async tryRestoreSession(): Promise<void> {
+    const client = this.client;
+    const { encryptedUserKey, encryptedRefreshToken } = this.settings;
     if (
       !this.settings.rememberSession ||
-      !this.settings.encryptedUserKey ||
-      !this.settings.encryptedRefreshToken ||
-      !this.client
+      !encryptedUserKey ||
+      !encryptedRefreshToken ||
+      !client
     ) {
       return;
     }
-    const passphrase = await this.ctx.promptPassphrase(
-      t("provider.bitwarden.unlockSession"),
-    );
-    if (!passphrase) return;
+    const controller = new AbortController();
+    this.loginAbort = controller;
     try {
+      const passphrase = await this.ctx.promptPassphrase(t("provider.bitwarden.unlockSession"));
+      if (!passphrase || controller.signal.aborted) return;
       const userKeyBytes = await decryptBytesWithPassphrase(
-        this.settings.encryptedUserKey,
+        encryptedUserKey,
         passphrase,
       );
       if (userKeyBytes.length !== 64) {
@@ -246,18 +272,15 @@ export class BitwardenProvider implements Provider {
           `restored user key has wrong length (${userKeyBytes.length})`,
         );
       }
-      const refreshToken = await decryptStringWithPassphrase(
-        this.settings.encryptedRefreshToken,
-        passphrase,
+      const { value: refreshToken, encrypt } = await createPassphraseStringCipher(
+        passphrase, encryptedRefreshToken,
       );
-      // Stash the refresh token on the client so refresh() can use it.
-      this.client.setTokens("", 0, refreshToken);
-      const refreshed = await this.client.refresh();
-      this.client.setTokens(
-        refreshed.access_token,
-        refreshed.expires_in,
-        refreshed.refresh_token ?? refreshToken,
-      );
+      if (controller.signal.aborted || !this.settings.rememberSession) return;
+      if (!refreshToken) throw new Error("Saved refresh token is empty");
+      this.encryptRefreshToken = encrypt;
+      client.setTokens("", 0, refreshToken);
+      await client.refreshAccessToken();
+      if (controller.signal.aborted || !this.settings.rememberSession) return;
       this.userKey = {
         encKey: userKeyBytes.slice(0, 32),
         macKey: userKeyBytes.slice(32, 64),
@@ -268,9 +291,12 @@ export class BitwardenProvider implements Provider {
     } catch (e) {
       // Wrong passphrase or expired refresh token - leave the encrypted
       // blobs in place and fall back to the regular master-password flow.
-      new Notice(
-        t("provider.bitwarden.restoreFailed", { msg: (e as Error).message }),
-      );
+      if (!controller.signal.aborted) {
+        this.clearSession();
+        new Notice(t("provider.bitwarden.restoreFailed", { msg: (e as Error).message }));
+      }
+    } finally {
+      if (this.loginAbort === controller) this.loginAbort = null;
     }
   }
 
@@ -305,11 +331,11 @@ export class BitwardenProvider implements Provider {
     packed.set(userKey.macKey, 32);
     const encryptedUserKey = await encryptBytesWithPassphrase(packed, passphrase);
     packed.fill(0);
-    const encryptedRefreshToken = await encryptStringWithPassphrase(
-      refreshToken,
-      passphrase,
-    );
+    const { encrypt } = await createPassphraseStringCipher(passphrase);
+    const encryptedRefreshToken = await encrypt(refreshToken);
     signal.throwIfAborted();
+    if (!this.settings.rememberSession) return;
+    this.encryptRefreshToken = encrypt;
     this.settings.encryptedUserKey = encryptedUserKey;
     this.settings.encryptedRefreshToken = encryptedRefreshToken;
     await this.persist();
@@ -512,15 +538,13 @@ export class BitwardenProvider implements Provider {
   ): Promise<void> {
     signal.throwIfAborted();
     if (this.client !== client) throw new Error(t("provider.bitwarden.serverUrlNotSet"));
+    this.clearSession();
     client.setTokens(
       loginRes.access_token,
       loginRes.expires_in,
       loginRes.refresh_token ?? null,
     );
     this.userKey = userKey;
-    // Invalidate any cached ciphers from a previous session.
-    this.ciphers = null;
-    this.cipherCacheExpires = 0;
 
     if (this.settings.rememberSession) {
       await this.persistSession(userKey, loginRes.refresh_token ?? null, signal);
@@ -529,6 +553,7 @@ export class BitwardenProvider implements Provider {
 
   dispose(): void {
     this.loginAbort?.abort();
+    this.clearSession();
   }
 
   parseRef(raw: string): ProviderRef | null {
@@ -589,7 +614,8 @@ export class BitwardenProvider implements Provider {
   }
 
   async writeKey(ref: ProviderRef, value: string): Promise<void> {
-    if (!this.client || !this.userKey) {
+    const { client, userKey } = this;
+    if (!client || !userKey) {
       throw new BitwardenApiError(401, "not logged in to Bitwarden");
     }
     const fieldLabel = ref.parts.field ?? "";
@@ -636,13 +662,14 @@ export class BitwardenProvider implements Provider {
         value,
         existing,
       );
-      await this.client.updateLoginCipher(existing.id, payload);
+      if (this.userKey !== userKey) throw new BitwardenApiError(401, "Bitwarden session changed");
+      await client.updateLoginCipher(existing.id, payload);
     } else {
       // Brand-new cipher - always created in the personal vault.
-      const nameEnc = await encryptString(this.userKey, ref.parts.item);
+      const nameEnc = await encryptString(userKey, ref.parts.item);
       const payload: LoginCipherPayload = {
         nameEnc,
-        folderIdOrNull: await this.resolveFolderId(ref.parts.folder),
+        folderIdOrNull: await this.resolveFolderId(ref.parts.folder, client, userKey),
         organizationIdOrNull: null,
         usernameEnc: null,
         passwordEnc: null,
@@ -651,13 +678,14 @@ export class BitwardenProvider implements Provider {
       };
       await this.applyFieldWrite(
         payload,
-        this.userKey,
+        userKey,
         field,
         fieldLabel,
         value,
         null,
       );
-      await this.client.createLoginCipher(payload);
+      if (this.userKey !== userKey) throw new BitwardenApiError(401, "Bitwarden session changed");
+      await client.createLoginCipher(payload);
     }
     this.ciphers = null;
     this.cipherCacheExpires = 0;
@@ -712,13 +740,8 @@ export class BitwardenProvider implements Provider {
   }
 
   async list(): Promise<ProviderRef[]> {
-    if (!this.client || !this.userKey) return [];
-    let ciphers: DecryptedCipher[];
-    try {
-      ciphers = await this.getCiphers();
-    } catch {
-      return [];
-    }
+    if (!this.client) return [];
+    const ciphers = await this.getCiphers();
     const byName = new Map<string, DecryptedCipher[]>();
     for (const cipher of ciphers) {
       const name = cipher.name.toLowerCase();
@@ -813,16 +836,17 @@ export class BitwardenProvider implements Provider {
           .setPlaceholder("https://vw.example.com")
           .setValue(this.settings.baseUrl)
           .onChange(async (v) => {
+            const baseUrl = v.replace(/\/+$/, "");
+            if (baseUrl === this.settings.baseUrl) return;
             this.loginAbort?.abort();
-            this.settings.baseUrl = v.replace(/\/+$/, "");
-            if (this.settings.baseUrl) {
-              this.client = new BitwardenClient({
-                baseUrl: this.settings.baseUrl,
-                deviceIdentifier: this.settings.deviceIdentifier,
-                clientVersion: this.ctx.pluginVersion ?? "0.0.0",
-              });
-            }
+            this.clearSession();
+            this.settings.baseUrl = baseUrl;
+            this.settings.encryptedUserKey = null;
+            this.settings.encryptedRefreshToken = null;
+            this.configureClient();
             await this.persist();
+            this.ctx.notifyAuthChanged(this.id);
+            this.notify();
           }),
       );
 
@@ -856,6 +880,7 @@ export class BitwardenProvider implements Provider {
           .onChange(async (v) => {
             this.settings.rememberSession = v;
             if (!v) {
+              this.encryptRefreshToken = null;
               this.settings.encryptedUserKey = null;
               this.settings.encryptedRefreshToken = null;
             }
@@ -867,50 +892,39 @@ export class BitwardenProvider implements Provider {
   // --- internals ---------------------------------------------------------
 
   private async getCiphers(): Promise<DecryptedCipher[]> {
-    const userKey = this.userKey;
-    if (!userKey) throw new BitwardenApiError(401, "not logged in");
+    const { userKey, client } = this;
+    if (!userKey || !client) throw new BitwardenApiError(401, "not logged in");
     const now = Date.now();
     if (this.ciphers && now < this.cipherCacheExpires) return this.ciphers;
     if (this.syncInflight) return this.syncInflight;
-    this.syncInflight = this.syncAndDecrypt().then((ciphers) => {
-      if (this.userKey !== userKey) {
-        throw new BitwardenApiError(401, "Bitwarden session changed during sync");
-      }
-      return ciphers;
-    });
+    const pending = this.syncAndDecrypt(client, userKey);
+    this.syncInflight = pending;
     try {
-      const c = await this.syncInflight;
-      this.ciphers = c;
-      this.cipherCacheExpires =
-        Date.now() + this.settings.cacheTtlSec * 1000;
-      return c;
+      return await pending;
     } finally {
-      this.syncInflight = null;
+      if (this.syncInflight === pending) this.syncInflight = null;
     }
   }
 
-  private async syncAndDecrypt(): Promise<DecryptedCipher[]> {
-    if (!this.client || !this.userKey) {
-      throw new BitwardenApiError(401, "not logged in");
-    }
-    const res = await this.client.sync();
+  private async syncAndDecrypt(client: BitwardenClient, userKey: SymmetricKey): Promise<DecryptedCipher[]> {
+    const res = await client.sync();
 
     // Derive organization keys: decrypt the user's RSA private key with the
     // user key, then RSA-decrypt each org's symmetric key.  Org ciphers are
     // encrypted with these, not the user key.  Any failure here just means
     // org ciphers stay invisible - personal ciphers are unaffected.
-    this.orgKeys = new Map<string, SymmetricKey>();
+    const orgKeys = new Map<string, SymmetricKey>();
     const orgs = res.Profile?.Organizations ?? [];
     if (res.Profile?.PrivateKey && orgs.length > 0) {
       try {
         const rsaKey = await unlockPrivateKey(
-          this.userKey,
+          userKey,
           res.Profile.PrivateKey,
         );
         for (const org of orgs) {
           if (!org.Id || !org.Key) continue;
           try {
-            this.orgKeys.set(org.Id, await unlockOrgKey(rsaKey, org.Key));
+            orgKeys.set(org.Id, await unlockOrgKey(rsaKey, org.Key));
           } catch {
             /* skip an org whose key we can't unwrap */
           }
@@ -922,7 +936,7 @@ export class BitwardenProvider implements Provider {
 
     const folderById = new Map<string, string>();
     for (const f of res.Folders ?? []) {
-      const name = await safeDecrypt(this.userKey, f.Name);
+      const name = await safeDecrypt(userKey, f.Name);
       if (name !== null) folderById.set(f.Id, name);
     }
 
@@ -935,8 +949,8 @@ export class BitwardenProvider implements Provider {
       // Pick the key: org ciphers use their org key, personal use userKey.
       // An org cipher whose key we couldn't unwrap is skipped.
       const key = c.OrganizationId
-        ? this.orgKeys.get(c.OrganizationId)
-        : this.userKey;
+        ? orgKeys.get(c.OrganizationId)
+        : userKey;
       if (!key) continue;
       // Newer ciphers carry their own key (cipher.Key): a 64-byte symmetric
       // key, EncString-wrapped with the user/org key.  When present, the
@@ -1004,15 +1018,23 @@ export class BitwardenProvider implements Provider {
         },
       });
     }
+    if (this.userKey !== userKey) {
+      throw new BitwardenApiError(401, "Bitwarden session changed during sync");
+    }
+    this.ciphers = out;
+    this.cipherCacheExpires = Date.now() + this.settings.cacheTtlSec * 1000;
     return out;
   }
 
-  private async resolveFolderId(folderName: string): Promise<string | null> {
+  private async resolveFolderId(
+    folderName: string,
+    client: BitwardenClient,
+    userKey: SymmetricKey,
+  ): Promise<string | null> {
     if (!folderName) return null;
-    if (!this.client) return null;
-    const res = await this.client.sync();
+    const res = await client.sync();
     for (const f of res.Folders ?? []) {
-      const name = await safeDecrypt(this.userKey!, f.Name);
+      const name = await safeDecrypt(userKey, f.Name);
       if (name === folderName) return f.Id;
     }
     // Auto-creating folders is out of scope for v0.4 - if the folder

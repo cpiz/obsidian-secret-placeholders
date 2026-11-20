@@ -112,6 +112,7 @@ export const zhTW: Messages = {
   "modal.secretBrowser.fieldPlaceholder": "搜尋欄位…",
   "modal.secretBrowser.noFields": "這個項目沒有可引用的欄位。",
   "modal.secretBrowser.searchPlaceholder": "搜尋密鑰…",
+  "modal.secretBrowser.loadFailed": "{provider}：載入密鑰失敗，請檢查連線後重試。",
 
   // 密鑰內嵌元素
   "span.reLogin": "重新登入",
@@ -140,6 +141,7 @@ export const zhTW: Messages = {
   "provider.bitwarden.serverNotSet":
     "Bitwarden：請先在設定中填寫伺服器 URL",
   "provider.bitwarden.sessionRestored": "Bitwarden 工作階段已還原",
+  "provider.bitwarden.persistRefreshFailed": "無法將續期後的 Bitwarden 工作階段儲存到此裝置。",
   "provider.bitwarden.restoreFailed":
     "無法還原 Bitwarden 工作階段：{msg}。請使用「登入」以主密碼登入。",
   "provider.bitwarden.unlockSession": "解鎖 Bitwarden 工作階段",

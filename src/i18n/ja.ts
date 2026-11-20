@@ -112,6 +112,7 @@ export const ja: Messages = {
   "modal.secretBrowser.fieldPlaceholder": "フィールドを検索…",
   "modal.secretBrowser.noFields": "この項目に参照できるフィールドはありません。",
   "modal.secretBrowser.searchPlaceholder": "シークレットを検索…",
+  "modal.secretBrowser.loadFailed": "{provider}：シークレットを読み込めませんでした。接続を確認して再試行してください。",
 
   // シークレットスパン
   "span.reLogin": "再ログイン",
@@ -140,6 +141,7 @@ export const ja: Messages = {
   "provider.bitwarden.serverNotSet":
     "Bitwarden: 先に設定でサーバー URL を指定してください",
   "provider.bitwarden.sessionRestored": "Bitwarden セッションを復元しました",
+  "provider.bitwarden.persistRefreshFailed": "更新した Bitwarden セッションをこのデバイスに保存できませんでした。",
   "provider.bitwarden.restoreFailed":
     "Bitwarden セッションを復元できませんでした: {msg}。「ログイン」からマスターパスワードでサインインしてください。",
   "provider.bitwarden.unlockSession": "Bitwarden セッションのロック解除",
